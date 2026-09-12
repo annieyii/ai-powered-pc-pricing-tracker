@@ -160,3 +160,23 @@ def test_a_current_stored_summary_is_not_flagged_as_stale(
     stored_summary()
     app = run_app()
     assert "predates the latest observation" not in body_text(app)
+
+
+def test_the_app_imports_the_way_streamlit_runs_it():
+    """Regression: the AppTest cases above run inside pytest, where
+    ``pythonpath = ["."]`` makes ``tracker`` importable. Streamlit puts the
+    script's own directory on the path instead, so ``import tracker.insights``
+    failed in a real launch while every test passed. Running the file directly
+    reproduces that path exactly.
+
+    Checking the HTTP status of a running server does not catch this: the
+    server answers 200 and reports the traceback inside the page.
+    """
+    import subprocess
+    import sys
+
+    root = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [sys.executable, str(root / "tracker" / "app.py")],
+        capture_output=True, text=True, timeout=90, cwd=root)
+    assert "ModuleNotFoundError" not in result.stderr, result.stderr[-1500:]
