@@ -9,13 +9,15 @@ Best Buy, and compares the two that match on a stated equivalence rule. The ques
 it is built to answer is narrow on purpose: where does a Lenovo SKU sit against a
 like-for-like competitor SKU, and is that position moving.
 
-Running the app gives you a Streamlit page with four sections, in this order:
+Running the app gives you a Streamlit page with five sections, in this order:
 
 1. **Price over time** for the strict equivalence group. This is the trend chart.
-2. **Latest observation per product**, one row per SKU with its own capture time.
-3. **Strict group matched-pair observation**, the price difference between the two
+2. **Observation summary**, a short written read of what the figures show. Every
+   number in it is checked against the computed values before it is displayed.
+3. **Latest observation per product**, one row per SKU with its own capture time.
+4. **Strict group matched-pair observation**, the price difference between the two
    strict SKUs at the most recent capture time where both carried a usable price.
-4. **Reference products**, listed for context and excluded from the chart and the
+5. **Reference products**, listed for context and excluded from the chart and the
    comparison above.
 
 Prices are recorded by hand. Each observation is appended to
