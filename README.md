@@ -92,9 +92,10 @@ Tests:
 uv run pytest
 ```
 
-**41 tests pass** at the time of writing: store behaviour including every refusal
-path, the pure metric functions, and five end-to-end checks that drive the real
-Streamlit page against the real data files.
+**99 tests pass** at the time of writing: store behaviour including every refusal
+path, the pure metric functions, the extraction gates against a stubbed client, and
+five end-to-end checks that drive the real Streamlit page against the real data files.
+No test reaches the network.
 
 ## Updating the data
 
