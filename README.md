@@ -175,13 +175,20 @@ What the model does **not** do is just as much of the design:
 - It is never called by the dashboard. **The app has no runtime LLM dependency**, which
   is why a reviewer can run it with no API key and no model pulled.
 
-**How the output is checked.** All four products were also captured by hand, so
-`data/structured/products.csv` is a human-verified ground-truth set. Model output is
-scored field by field against it rather than described anecdotally, giving a stated
-denominator: N fields extracted across 4 products, of which X matched the verified
-value, Y were rejected by a deterministic validator, and Z required human correction.
-Output is requested as JSON and parsed through a pydantic schema, so a malformed or
-hallucinated response fails at the schema boundary instead of entering the data.
+**How the output is checked.** [`tracker/extract.py`](tracker/extract.py) puts three
+gates between the model and any conclusion. Its reply is parsed through a pydantic
+schema, so a malformed or invented shape fails at the boundary instead of entering the
+data. The parsed values then meet deterministic validators: grounding (a number the
+raw page text never contained was guessed, not read), plus range, power-of-two memory,
+known-storage-size and form-factor enum checks. What survives is scored field by field
+against `data/structured/products.csv`, which all four products were captured by hand
+to fill in, so it is a human-verified ground truth. That gives a stated denominator
+rather than a favourable example: N fields extracted across 4 products, X matched the
+verified value, Y validator findings.
+
+The model never writes to `products.csv`. Letting extraction edit the master would
+destroy the only reference the score has. Results go to `data/extraction_review.csv`
+with both values side by side, and the correction is left to a person.
 
 The client targets the **OpenAI-compatible chat-completions API**, and the endpoint is
 supplied at run time rather than assumed. The same code runs against a remote endpoint
@@ -190,10 +197,18 @@ or a local Ollama instance, with no backend-specific branch. `LLM_BASE_URL`,
 exits naming the missing variable rather than falling back to a default that may not
 exist. See [`.env.example`](.env.example).
 
-> **[Placeholder]** The extraction module and the scored output file
-> (`data/extraction_review.csv`) are not yet in the repository. The design above is
-> specified in [`docs/superpowers/spec.md`](docs/superpowers/spec.md) section 5; the
-> figures for X, Y and Z will be filled in from the generated review file.
+Run it by hand, never from the app:
+
+```bash
+uv run python -m tracker.extract
+```
+
+It reads `data/raw_specs/<sku>.txt`, one verbatim copy of each product page's title
+and Specifications block, and writes `data/extraction_review.csv`.
+
+> **[Placeholder]** The raw specification files have not been captured yet, so
+> `data/extraction_review.csv` has not been generated. The figures for N, X and Y
+> above are to be filled in from that file once the run is made.
 
 AI coding assistance was also used while building the repository itself. Those commits
 carry a `Co-Authored-By` trailer, so the extent of it is visible in `git log`.
@@ -256,4 +271,4 @@ reads the page and can tell a purchase price from a financing figure.
 | B. Updateable pricing trend chart | Section 1 of the app, first on the page. Data from `tracker/metrics.py:series_for` |
 | C. Source code, formulas, or automation steps | `tracker/`, `tests/`, and the "Running it" and "Updating the data" sections above |
 | D. Brief explanation, 1 to 2 pages | Separate PDF. Full specification in `docs/superpowers/spec.md`; sampling procedure in `docs/capture-checklist.md` |
-| E. AI usage and human validation summary | "Where AI is used" above, plus `data/extraction_review.csv` (not yet generated) |
+| E. AI usage and human validation summary | "Where AI is used" above, `tracker/extract.py`, and `data/extraction_review.csv` (not yet generated) |
