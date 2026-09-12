@@ -16,3 +16,6 @@ __pycache__/
 
 # Generated store
 data/tracker.db
+
+# Regenerable diagram evidence
+docs/diagrams/*.visual-check.*
