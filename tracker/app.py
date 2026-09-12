@@ -8,9 +8,20 @@ loader would keep serving the old file.
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import replace
 from datetime import datetime, time
 from pathlib import Path
+
+# Streamlit executes this file directly, so the interpreter puts tracker/ on
+# sys.path rather than the project root and `import tracker.x` fails. An
+# editable install is supposed to cover that, but making the entry point depend
+# on install state means `streamlit run` breaks for anyone who unpacked the
+# project without syncing, or whose path defeats the .pth mechanism. Four lines
+# here make it work either way.
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 import pandas as pd
 import plotly.graph_objects as go
