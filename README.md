@@ -330,5 +330,5 @@ reads the page and can tell a purchase price from a financing figure.
 | A. Working tracker or output file | `tracker/app.py`, over `data/structured/products.csv` and `data/structured/prices_manual.csv` |
 | B. Updateable pricing trend chart | Section 1 of the app, first on the page. Data from `tracker/metrics.py:series_for` |
 | C. Source code, formulas, or automation steps | `tracker/`, `tests/`, and the "Running it" and "Updating the data" sections above |
-| D. Brief explanation, 1 to 2 pages | Separate PDF. Full specification in `docs/superpowers/spec.md`; sampling procedure in `docs/capture-checklist.md` |
+| D. Brief explanation, 1 to 2 pages | `docs/report.md`. Full specification in `docs/spec.md`; sampling procedure in `docs/capture-checklist.md` |
 | E. AI usage and human validation summary | "Where AI is used" above, `tracker/extract.py`, and `data/extraction_review.csv` (not yet generated) |

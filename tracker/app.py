@@ -8,12 +8,20 @@ loader would keep serving the old file.
 from __future__ import annotations
 
 import os
+from dataclasses import replace
+from datetime import datetime, time
 from pathlib import Path
 
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from tracker.insights import (
+    Scope,
+    detect,
+    select_by_score,
+    select_with_model,
+)
 from tracker.metrics import (
     latest_per_sku,
     series_for,
@@ -56,7 +64,7 @@ if data.rejected:
         st.dataframe(pd.DataFrame([{"line": r.line, "sku": r.sku,
                                     "reason": r.reason, **r.raw}
                                    for r in data.rejected]),
-                     use_container_width=True, hide_index=True)
+                     width="stretch", hide_index=True)
 
 st.caption(f"{data.accepted} of {data.total} rows accepted")
 
@@ -65,10 +73,56 @@ if data.prices.empty:
                "`data/structured/prices_manual.csv` and reload this page.")
     st.stop()
 
-latest = latest_per_sku(data.prices)
-points = strict_time_points(data.prices, data.products)
-st.caption(f"Last observation {data.prices['captured_at'].max():%Y-%m-%d %H:%M} · "
-           f"{len(data.prices)} snapshots · "
+# --------------------------------------------------------------- selection
+# The filter binds every section below it. A chart drawn for one selection
+# sitting beside a summary written for another is the failure this guards
+# against, and no grounding check would catch it: both halves are separately
+# true. So the scope is chosen once and applied once.
+names = dict(zip(data.products["sku"],
+                 data.products["brand"] + " " + data.products["model_name"]))
+
+with st.sidebar:
+    st.header("Selection")
+    every_sku = list(data.products["sku"])
+    picked = st.multiselect("Products", options=every_sku, default=every_sku,
+                            format_func=lambda sku: names.get(sku, sku))
+    earliest = data.prices["captured_at"].min().date()
+    latest = data.prices["captured_at"].max().date()
+    window = st.date_input("Capture dates", value=(earliest, latest),
+                           min_value=earliest, max_value=latest)
+
+start = end = None
+if isinstance(window, (list, tuple)) and len(window) == 2:
+    start = datetime.combine(window[0], time.min)
+    end = datetime.combine(window[1], time.max)
+
+scope = Scope(skus=None if set(picked) == set(every_sku) else tuple(picked),
+              start=start, end=end)
+scoped = scope.apply(data.prices)
+view = replace(data, prices=scoped)
+filtered = scope.key() != Scope().key()
+
+# A result computed for one scope must not survive a change of scope.
+if st.session_state.get("scope_key") != scope.key():
+    st.session_state["scope_key"] = scope.key()
+    st.session_state.pop("summary_run", None)
+    st.session_state.pop("ranking", None)
+
+settings, missing_reason = settings_or_reason(os.environ)
+
+if scoped.empty:
+    st.warning("The current selection contains no observations. Widen it in "
+               "the sidebar.")
+    st.stop()
+
+if filtered:
+    st.info(f"A selection is active: {len(scoped)} of {len(data.prices)} "
+            f"observations are in view, and every section below reflects it.")
+
+latest = latest_per_sku(scoped)
+points = strict_time_points(scoped, data.products)
+st.caption(f"Last observation {scoped['captured_at'].max():%Y-%m-%d %H:%M} · "
+           f"{len(scoped)} snapshots · "
            f"{points} capture time(s) covering the strict group")
 
 # --------------------------------------------------------------- 1. trend
@@ -77,7 +131,7 @@ st.header("1. Price over time — strict equivalence group")
 strict = data.products[data.products["role"] == "strict"]
 figure = go.Figure()
 for index, product in enumerate(strict.itertuples()):
-    line = series_for(data.prices, product.sku)
+    line = series_for(scoped, product.sku)
     if line.empty:
         continue
     name = f"{product.brand} {product.model_name}"
@@ -91,27 +145,72 @@ figure.update_layout(yaxis_title="Price (USD)",
                      xaxis_title="Captured at (Asia/Taipei)",
                      hovermode="x unified", height=420,
                      legend=dict(orientation="h", y=-0.25))
-st.plotly_chart(figure, use_container_width=True)
+st.plotly_chart(figure, width="stretch")
 
 if points < 2:
     st.info(f"Only {points} capture time recorded so far. A trend needs at "
             "least two.")
 else:
-    moved = strict.merge(data.prices, on="sku").groupby("sku")["price"].nunique()
+    moved = strict.merge(scoped, on="sku").groupby("sku")["price"].nunique()
     if (moved <= 1).all():
         st.info(f"No price change observed across {points} capture times.")
 
-# -------------------------------------------------------------- 2. summary
-st.header("2. Observation summary")
+# ------------------------------------------------------------- 2. findings
+st.header("2. What the observations say")
+st.caption("Findings are detected and scored deterministically. The model, when "
+           "one is configured, chooses which of them to lead with. It never "
+           "produces a figure, because it never computes one.")
+
+found = detect(scoped, data.products)
+
+if not found:
+    st.info("No findings for the current selection.")
+else:
+    if st.button("Rank with the language model", disabled=settings is None,
+                 key="rank_button"):
+        with st.spinner("Asking the model which findings to lead with"):
+            try:
+                st.session_state["ranking"] = select_with_model(
+                    found, build_client(settings), settings.model)
+            except Exception as exc:  # noqa: BLE001
+                st.session_state.pop("ranking", None)
+                st.error(f"The endpoint did not answer: {exc}")
+    if settings is None:
+        st.caption(missing_reason)
+
+    ranking = st.session_state.get("ranking") or select_by_score(found, 3)
+    if ranking.framing:
+        st.markdown(f"**{ranking.framing}**")
+    for item in ranking.insights:
+        st.markdown(f"- {item.sentence}")
+    st.caption("Selected by the language model from the scored candidates."
+               if ranking.source == "model"
+               else "Selected by score. No model was involved.")
+
+    with st.expander(f"All {len(found)} findings, and how each was ranked"):
+        st.caption("significance = magnitude x recency x scope x rarity. The "
+                   "factors are shown so the order can be argued with rather "
+                   "than trusted.")
+        st.dataframe(pd.DataFrame([{
+            "significance": round(item.significance, 3),
+            "magnitude": round(item.facts.get("magnitude", 0.0), 2),
+            "recency": round(item.facts.get("recency", 0.0), 2),
+            "scope": round(item.facts.get("scope_weight", 0.0), 2),
+            "rarity": round(item.facts.get("rarity", 0.0), 2),
+            "kind": item.kind,
+            "finding": item.sentence,
+        } for item in found]), width="stretch", hide_index=True)
+
+
+# ------------------------------------------------------------- 3. summary
+st.header("3. Observation summary")
 
 # The summary renders above the controls, but the controls have to run first so
 # a click is reflected in the same run. A container reserves the space.
 summary_area = st.container()
 
-context = build_context(data, data.products)
+context = build_context(view, data.products)
 stored = read_stored_summary()
-settings, missing_reason = settings_or_reason(os.environ)
-
 if st.button("Regenerate with the language model", disabled=settings is None):
     with st.spinner("Asking the model, then checking every figure it returns"):
         try:
@@ -168,7 +267,7 @@ with summary_area:
                    "needed to render this page.")
 
 # ------------------------------------------------------------ 3. snapshot
-st.header("3. Latest observation per product")
+st.header("4. Latest observation per product")
 
 # Left join from products so a product with no usable snapshot stays visible
 # instead of disappearing from the comparison.
@@ -177,12 +276,12 @@ st.dataframe(
     table[["role", "brand", "model_name", "cpu", "form_factor", "display_type",
            "brightness_nits", "price", "regular_price", "savings",
            "availability", "seller", "captured_at"]],
-    use_container_width=True, hide_index=True)
+    width="stretch", hide_index=True)
 
 # ----------------------------------------------------------- 4. comparison
-st.header("4. Strict group — matched-pair observation")
+st.header("5. Strict group — matched-pair observation")
 
-comparison = strict_comparison(data.prices, data.products)
+comparison = strict_comparison(scoped, data.products)
 names = dict(zip(data.products["sku"],
                  data.products["brand"] + " " + data.products["model_name"]))
 
@@ -207,7 +306,7 @@ else:
         "single attribute.")
 
 # ------------------------------------------------------------ 5. reference
-st.header("5. Reference products")
+st.header("6. Reference products")
 st.caption("Excluded from the chart and the comparison above. Each differs "
            "from the strict pair on more than one field, so no difference is "
            "attributed to any single attribute.")

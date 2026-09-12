@@ -59,11 +59,35 @@ def test_the_page_renders_without_raising(page):
     assert not page.exception
 
 
-def test_all_five_sections_are_present(page):
-    headers = [h.value for h in page.header]
-    assert len(headers) == 5
+def test_all_six_sections_are_present(page):
+    """The sidebar carries a header of its own, so the numbered sections are
+    the ones counted here."""
+    headers = [h.value for h in page.header if h.value[0].isdigit()]
+    assert len(headers) == 6
     assert headers[0].startswith("1. Price over time")
-    assert headers[1].startswith("2. Observation summary")
+    assert headers[1].startswith("2. What the observations say")
+    assert headers[2].startswith("3. Observation summary")
+
+
+def test_findings_are_listed_and_their_ranking_is_inspectable(page):
+    """The ranking is only arguable if the factors behind it are visible."""
+    expanders = [e.label for e in page.expander]
+    assert any("how each was ranked" in label for label in expanders)
+
+
+def test_the_selection_controls_are_in_the_sidebar(page):
+    """Every section reads the same scope, so the control that sets it lives
+    once, outside the flow of the sections it governs."""
+    assert len(page.sidebar.multiselect) == 1
+    assert len(page.sidebar.date_input) == 1
+
+
+def test_narrowing_the_selection_narrows_the_whole_page(page):
+    """A chart drawn for one selection beside a summary written for another
+    is separately true in both halves and wrong as a page."""
+    narrowed = page.sidebar.multiselect[0].set_value(["6672159"]).run()
+    assert not narrowed.exception
+    assert any("A selection is active" in info.value for info in narrowed.info)
 
 
 def test_the_trend_chart_is_the_first_section(page):
