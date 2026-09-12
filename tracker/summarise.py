@@ -50,7 +50,12 @@ from tracker.extract import (
     build_client,
     read_settings,
 )
-from tracker.metrics import _strict_skus, latest_per_sku, strict_comparison, strict_time_points
+from tracker.metrics import (
+    _strict_skus,
+    latest_per_sku,
+    strict_comparison,
+    strict_time_points,
+)
 from tracker.store import TIMESTAMP_FORMAT, Dataset
 
 PRICES_CSV = ROOT / "data" / "structured" / "prices_manual.csv"

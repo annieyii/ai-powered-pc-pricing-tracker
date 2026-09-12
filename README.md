@@ -159,44 +159,83 @@ Three rules that are never relaxed:
 
 ## Where AI is used
 
-AI is used in exactly one place: **offline structured extraction of product
-specifications from raw Best Buy page text**, on the product-onboarding path. It is
-not on the price path and not in the dashboard's request path.
+AI sits in **two** places in this repository, doing two different jobs. They are not
+the same feature at two sizes, and only one of them is product facing.
 
-This is the part of the problem that is genuinely unstructured. The same specification
-appears on different pages as `16GB Memory`, `16 GB RAM` and `System Memory: 16GB`,
-and product titles routinely disagree with the specification table below them. Turning
-that text into the structured fields the equivalence rule needs is work a model is
-good at, and work that is tedious and error-prone by hand.
+### 1. Analysis on the dashboard (the product-facing feature)
 
-What the model does **not** do is just as much of the design:
+Section 2 of the app is a short observation summary written in natural language:
+what the window covers, what each product is listed at now, what the matched pair
+shows, and whether anything moved. It is the feature a product manager would
+actually use, because it answers *what changed and what should I look at* without
+making them read the chart and the table first.
 
-- It never reads or produces a price. Price parsing is deterministic.
-- It never decides equivalence. Grouping is a rule applied to structured fields.
-- It is never called by the dashboard. **The app has no runtime LLM dependency**, which
-  is why a reviewer can run it with no API key and no model pulled.
+This is where a model belongs, and the reason is structural. **Acquisition ambiguity
+ends when an official structured feed exists**: an API that returns `1299.99` does not
+need a model to read `$1,299.99` off a page. **Interpretation ambiguity does not end,
+and it grows with the row count.** Four SKUs over three days can be read by eye. Four
+hundred SKUs over a quarter cannot, and no amount of structure in the feed makes the
+reading easier. So the durable place for the model is the layer that turns computed
+figures into a judgement about what matters, not the layer that turns text into
+figures.
 
-**How the output is checked.** [`tracker/extract.py`](tracker/extract.py) puts three
-gates between the model and any conclusion. Its reply is parsed through a pydantic
-schema, so a malformed or invented shape fails at the boundary instead of entering the
-data. The parsed values then meet deterministic validators: grounding (a number the
-raw page text never contained was guessed, not read), plus range, power-of-two memory,
-known-storage-size and form-factor enum checks. What survives is scored field by field
-against `data/structured/products.csv`, which all four products were captured by hand
-to fill in, so it is a human-verified ground truth. That gives a stated denominator
-rather than a favourable example: N fields extracted across 4 products, X matched the
-verified value, Y validator findings.
+**How it is kept honest.** [`tracker/summarise.py`](tracker/summarise.py) hands the
+model no rows and no page text. It builds a context dictionary of values `metrics.py`
+has already computed, and the prompt states that no figure outside that dictionary
+may appear in the reply. Every numeric token in the returned prose is then checked
+back against the same dictionary. **If any figure is not there, the whole summary is
+discarded**, not edited: a reader cannot tell which sentence was invented, so a
+partially trusted note is worth less than a deterministic one. One retry is allowed,
+naming the figures that were refused, and then the deterministic `template_summary`
+takes over.
 
-The model never writes to `products.csv`. Letting extraction edit the master would
-destroy the only reference the score has. Results go to `data/extraction_review.csv`
-with both values side by side, and the correction is left to a person.
+`template_summary` is the floor, not an error path. It is built by string formatting
+from the same context, so it needs no endpoint, no key and no network, and it is what
+renders when nothing else is present. The app reads a previously generated summary
+from `data/summary.md` when one exists, flags it visibly if snapshots have been
+recorded since it was written, and calls an endpoint only when someone presses
+**Regenerate with the language model**. That button is disabled, naming the missing
+variable, when `LLM_BASE_URL`, `LLM_MODEL` or `LLM_API_KEY` is unset. **The page still
+loads and still summarises with none of them set and no network available.**
 
-The client targets the **OpenAI-compatible chat-completions API**, and the endpoint is
-supplied at run time rather than assumed. The same code runs against a remote endpoint
-or a local Ollama instance, with no backend-specific branch. `LLM_BASE_URL`,
-`LLM_MODEL` and `LLM_API_KEY` are read from the environment, and the extraction step
-exits naming the missing variable rather than falling back to a default that may not
-exist. See [`.env.example`](.env.example).
+Generate the stored file by hand:
+
+```bash
+uv run python -m tracker.summarise
+```
+
+It writes `data/summary.md` only from output that passed the grounding check, with a
+header recording the model, the generation time and the last capture time it saw.
+
+### 2. Offline specification extraction (a worked example of validation)
+
+[`tracker/extract.py`](tracker/extract.py) turns raw Best Buy page text into the
+structured fields the equivalence rule needs. The same specification reaches the page
+as `16GB Memory`, `16 GB RAM` and `System Memory: 16GB`, and titles routinely
+disagree with the table below them.
+
+Three gates stand between that model and any conclusion. Its reply is parsed through
+a pydantic schema, so a malformed or invented shape fails at the boundary instead of
+entering the data. The parsed values then meet deterministic validators: grounding (a
+number the raw page text never contained was guessed, not read), plus range,
+power-of-two memory, known-storage-size and form-factor enum checks. What survives is
+scored field by field against `data/structured/products.csv`, which was filled in by
+hand for all four products and is therefore verified ground truth. That gives a
+stated denominator rather than a favourable example: N fields extracted across 4
+products, X matched the verified value, Y validator findings. Results go to
+`data/extraction_review.csv` with both values side by side, and the correction is
+left to a person. The model never writes to `products.csv`, because letting
+extraction edit the master would destroy the only reference the score has.
+
+**This layer is retained as a demonstration, and it is worth being explicit about
+what that means: it would not exist against the official structured API.** Best Buy
+publishes a products API that returns these fields already typed. Given access to it,
+the correct decision is to delete this module and call the endpoint, because reading
+a specification out of prose is a workaround for not having the data, not a capability
+worth keeping. It is here because this prototype does not have that access, and
+because the validation pattern it demonstrates, scoring model output field by field
+against a human-verified master, is the part that transfers to the analysis layer
+above.
 
 Run it by hand, never from the app:
 
@@ -208,8 +247,26 @@ It reads `data/raw_specs/<sku>.txt`, one verbatim copy of each product page's ti
 and Specifications block, and writes `data/extraction_review.csv`.
 
 > **[Placeholder]** The raw specification files have not been captured yet, so
-> `data/extraction_review.csv` has not been generated. The figures for N, X and Y
-> above are to be filled in from that file once the run is made.
+> `data/extraction_review.csv` has not been generated, and no endpoint has been
+> configured yet, so `data/summary.md` has not been generated either. The figures for
+> N, X and Y above are to be filled in from the review file once the run is made. The
+> dashboard currently renders the deterministic summary, which is the intended
+> behaviour with no endpoint present.
+
+### What no model does here
+
+- It never reads or produces a price. Price parsing and ingest are deterministic.
+- It never decides equivalence. Grouping is a rule applied to structured fields.
+- It never writes to the system of record. Both CSVs stay human-edited.
+- Nothing calls an endpoint on page load. A reviewer can run the whole app with no
+  API key and no model available.
+
+The client targets the **OpenAI-compatible chat-completions API** in both places, and
+the endpoint is supplied at run time rather than assumed. The same code runs against a
+remote endpoint or a local Ollama instance, with no backend-specific branch.
+`LLM_BASE_URL`, `LLM_MODEL` and `LLM_API_KEY` are read from the environment, and both
+entry points refuse to fall back to a default that may not exist. See
+[`.env.example`](.env.example).
 
 AI coding assistance was also used while building the repository itself. Those commits
 carry a `Co-Authored-By` trailer, so the extent of it is visible in `git log`.
