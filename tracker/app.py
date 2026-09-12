@@ -7,6 +7,7 @@ loader would keep serving the old file.
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -20,6 +21,16 @@ from tracker.metrics import (
     strict_time_points,
 )
 from tracker.store import build
+from tracker.summarise import (
+    build_context,
+    build_client,
+    read_stored_summary,
+    settings_or_reason,
+    stored_is_stale,
+    summarise,
+    template_summary,
+    write_stored_summary,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 PRODUCTS_CSV = ROOT / "data" / "structured" / "products.csv"
@@ -90,8 +101,74 @@ else:
     if (moved <= 1).all():
         st.info(f"No price change observed across {points} capture times.")
 
-# ------------------------------------------------------------ 2. snapshot
-st.header("2. Latest observation per product")
+# -------------------------------------------------------------- 2. summary
+st.header("2. Observation summary")
+
+# The summary renders above the controls, but the controls have to run first so
+# a click is reflected in the same run. A container reserves the space.
+summary_area = st.container()
+
+context = build_context(data, data.products)
+stored = read_stored_summary()
+settings, missing_reason = settings_or_reason(os.environ)
+
+if st.button("Regenerate with the language model", disabled=settings is None):
+    with st.spinner("Asking the model, then checking every figure it returns"):
+        try:
+            st.session_state["summary_run"] = (
+                *summarise(context, build_client(settings), settings.model),
+                settings.model)
+        # Any endpoint failure is the endpoint's problem, not the page's: the
+        # computed summary below is unaffected and the app stays up.
+        except Exception as exc:  # noqa: BLE001
+            st.session_state.pop("summary_run", None)
+            st.error(f"The endpoint did not answer: {exc}")
+
+if settings is None:
+    st.caption(missing_reason)
+
+run = st.session_state.get("summary_run")
+
+if run and run[2] == "model" and st.button("Save as the stored summary"):
+    write_stored_summary(run[0], run[3], context)
+    st.success("Written to `data/summary.md`. That file is what this page shows "
+               "by default from now on.")
+
+with summary_area:
+    if run and run[2] == "model":
+        st.markdown(run[0])
+        st.caption("Written by the language model in this session. Every figure "
+                   "in it was checked against the computed values before it was "
+                   "displayed. Not stored yet.")
+    elif run:
+        st.warning(
+            f"The model summary was discarded in full. These figures are not "
+            f"in the computed values: {', '.join(run[1])}. A summary is never "
+            f"shown with a figure that was not verified, so the computed "
+            f"summary is below instead.")
+        st.markdown(template_summary(context))
+        st.caption("Computed directly from the recorded observations. No model "
+                   "output is used here.")
+    elif stored is not None:
+        st.markdown(stored.prose)
+        st.caption(f"Written by `{stored.model}` on {stored.generated_at} and "
+                   f"stored in `data/summary.md`. Every figure in it was checked "
+                   f"against the computed values before it was stored.")
+        if stored_is_stale(stored, context):
+            st.warning(
+                f"This stored summary was generated from observations up to "
+                f"{stored.last_capture}, and the newest snapshot is from "
+                f"{context['last_capture']}. It predates the latest "
+                f"observation and may no longer describe what the chart above "
+                f"shows.")
+    else:
+        st.markdown(template_summary(context))
+        st.caption("Computed directly from the recorded observations by string "
+                   "formatting. No language model was called, and none is "
+                   "needed to render this page.")
+
+# ------------------------------------------------------------ 3. snapshot
+st.header("3. Latest observation per product")
 
 # Left join from products so a product with no usable snapshot stays visible
 # instead of disappearing from the comparison.
@@ -102,8 +179,8 @@ st.dataframe(
            "availability", "seller", "captured_at"]],
     use_container_width=True, hide_index=True)
 
-# ----------------------------------------------------------- 3. comparison
-st.header("3. Strict group — matched-pair observation")
+# ----------------------------------------------------------- 4. comparison
+st.header("4. Strict group — matched-pair observation")
 
 comparison = strict_comparison(data.prices, data.products)
 names = dict(zip(data.products["sku"],
@@ -129,8 +206,8 @@ else:
         "observation at one moment; the difference is not attributed to any "
         "single attribute.")
 
-# ------------------------------------------------------------ 4. reference
-st.header("4. Reference products")
+# ------------------------------------------------------------ 5. reference
+st.header("5. Reference products")
 st.caption("Excluded from the chart and the comparison above. Each differs "
            "from the strict pair on more than one field, so no difference is "
            "attributed to any single attribute.")
