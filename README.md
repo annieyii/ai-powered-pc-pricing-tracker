@@ -12,14 +12,19 @@ like-for-like competitor SKU, and is that position moving.
 Running the app gives you a Streamlit page with a headline result and six numbered
 sections, in this order:
 
-1. **Price over time** for the strict equivalence group. This is the trend chart.
-2. **Observation summary**, a short written read of what the figures show. Every
-   number in it is checked against the computed values before it is displayed.
-3. **Latest observation per product**, one row per SKU with its own capture time.
-4. **Strict group matched-pair observation**, the price difference between the two
+1. **Price over time**, the trend chart. Every tracked product is plotted: the
+   strict pair in full, the reference SKUs muted and marked in the legend.
+2. **What the observations say**, the findings detected between consecutive
+   captures, price and otherwise.
+3. **Observation summary**, a short written read of what the figures show. Every
+   figure in it appears among the computed values before it is displayed.
+4. **Latest observation per product**, one row per selected SKU with its own
+   capture time.
+5. **Strict group matched-pair observation**, the price difference between the two
    strict SKUs at the most recent capture time where both carried a usable price.
-5. **Reference products**, listed for context and excluded from the chart and the
-   comparison above.
+6. **Reference products**, listed for context and excluded from the price
+   difference above. They are on the chart, muted, because a reader asks where the
+   other tracked machines sit.
 
 Prices are recorded by hand. Each observation is appended to
 `data/structured/prices_manual.csv`, which is the system of record. On every page
@@ -51,8 +56,9 @@ as well as prices. The extra field only narrows the group; it never widens it.
 | reference | HP OmniBook X Flip 2-in-1 14in | 6667986 | Intel Core Ultra 5 325 | 2-in-1 | $1,349.99 |
 | reference | Dell 14S 14in | 6679150 | AMD Ryzen AI 5 430 | clamshell | $1,299.99 |
 
-All four are sold and shipped by Best Buy and were purchasable at capture time. The
-store is fixed to Union Square, NYC for every capture. Currency is USD.
+All four are sold by Best Buy and were purchasable at capture time, by store pickup
+only: shipping to the recorded postcode was unavailable at every capture. The store
+is fixed to Union Square, NYC. Currency is USD.
 
 **Why two are `strict`.** SKUs 6672159 and 6668002 match on every field in the
 equivalence rule, and were listed at the same price at the first capture. They are
@@ -109,9 +115,9 @@ Tests:
 uv run pytest
 ```
 
-**253 tests pass** at the time of writing: store behaviour including every refusal
+**278 tests pass** at the time of writing: store behaviour including every refusal
 path, the pure metric functions, the extraction gates against a stubbed client, and
-seventeen end-to-end checks that drive the real Streamlit page against the real data
+twenty-six end-to-end checks that drive the real Streamlit page against the real data
 files. No test reaches the network.
 
 ## Updating the data
@@ -202,9 +208,9 @@ figures.
 **How it is kept honest.** [`tracker/summarise.py`](tracker/summarise.py) hands the
 model no rows and no page text. It builds a context dictionary of values `metrics.py`
 has already computed, and the prompt states that no figure outside that dictionary
-may appear in the reply. Every numeric token in the returned prose is then checked
-back against the same dictionary. **If any figure is not there, the whole summary is
-discarded**, not edited: a reader cannot tell which sentence was invented, so a
+may appear in the reply. Every numeric token in the returned prose is then looked up
+in that dictionary. **If any figure is not there, the whole summary is discarded**,
+not edited: a reader cannot tell which sentence was invented, so a
 partially trusted note is worth less than a deterministic one. One retry is allowed,
 naming the figures that were refused, and then the deterministic `template_summary`
 takes over.
@@ -356,9 +362,11 @@ carry a `Co-Authored-By` trailer, so the extent of it is visible in `git log`.
    not read as a consequence of form factor or brand.
 9. The dataset contains no personal data. All of it is public product information.
 
-> **[Placeholder]** Final snapshot count, observation window and any observed price
-> movements are to be stated here once the scheduled captures in
-> `docs/capture-checklist.md` are complete.
+> **Observation window.** Five capture times from 2026-09-12 15:07 to
+> 2026-09-13 21:00 Asia/Taipei, with two more scheduled for 2026-09-14 to bracket
+> the Dell promotion's stated expiry. No strict price moved across the window. The
+> Union Square pickup date moved four times and one stock note once; this line is
+> updated from the capture log once the last two are recorded.
 
 ### A note on how prices are collected
 
@@ -380,4 +388,4 @@ reads the page and can tell a purchase price from a financing figure.
 | B. Updateable pricing trend chart | Section 1 of the app, first on the page. Data from `tracker/metrics.py:series_for` |
 | C. Source code, formulas, or automation steps | `tracker/`, `tests/`, and the "Running it" and "Updating the data" sections above |
 | D. Brief explanation, 1 to 2 pages | `report/main.tex`, built with `cd report && latexmk -pdf main.tex`. Full specification in `docs/spec.md`; sampling procedure in `docs/capture-checklist.md` |
-| E. AI usage and human validation summary | "Where AI is used" above, `tracker/extract.py`, and `data/extraction_review.csv` (not yet generated) |
+| E. AI usage and human validation summary | "Where AI is used" above, `tracker/extract.py`, and `data/extraction_review.csv` alongside `data/extraction_review.qwen2.5-7b.csv`, one run per endpoint |

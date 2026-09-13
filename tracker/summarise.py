@@ -282,6 +282,14 @@ def verify_grounded(prose: str, context: Mapping[str, Any]) -> list[str]:
     it was invented, and a range check would not catch it because an invented
     price is a perfectly plausible price. Reported as written, so the page can
     name the value it refused.
+
+    **What it does not check.** Membership only. A figure that belongs to one
+    product, attached in the prose to another, is present in the context and
+    passes: `Dell 14S was listed at $1,299.99` is wrong and grounded. So is a
+    count borrowed from an unrelated field. Catching that needs the claim
+    parsed and matched to its subject, which this does not attempt. The check
+    bounds invention, not interpretation, and the summary is worth exactly
+    that much.
     """
     grounded = _context_numbers(context)
     seen: set[str] = set()
