@@ -109,6 +109,37 @@ def test_a_filter_appears_only_for_a_column_the_products_disagree_about(page):
             "filter_operating_system"}.isdisjoint(keys)
 
 
+def test_an_option_carries_the_count_it_would_leave():
+    """Intersecting filters have dead ends: every choice is reasonable alone
+    and the combination matches nothing. The count puts the dead end where it
+    can be seen before it is chosen rather than explained after."""
+    app = run_app().sidebar.multiselect(key="filter_brand").set_value(
+        ["Lenovo"]).run()
+    processors = app.sidebar.multiselect(key="filter_cpu").options
+    assert "Intel Core Ultra 5 325  (0)" in processors
+    assert "AMD Ryzen AI 5 430  (1)" in processors
+
+
+def test_an_empty_selection_names_the_filters_that_emptied_it():
+    """With a dozen controls, "widen the selection" is not an instruction."""
+    app = run_app().sidebar.multiselect(key="filter_brand").set_value(
+        ["Lenovo"]).run()
+    app = app.sidebar.multiselect(key="filter_cpu").set_value(
+        ["Intel Core Ultra 5 325"]).run()
+    said = " ".join(w.value for w in app.warning)
+    assert "Brand" in said and "Processor" in said
+    assert "Lenovo" in said and "Intel Core Ultra 5 325" in said
+
+
+def test_reset_puts_every_filter_back():
+    """The escape hatch. Reversing a dozen controls by hand is not a fix."""
+    app = run_app().sidebar.multiselect(key="filter_brand").set_value(
+        ["Lenovo"]).run()
+    assert any("A selection is active" in info.value for info in app.info)
+    app = app.sidebar.button[0].click().run()
+    assert not any("A selection is active" in info.value for info in app.info)
+
+
 def test_an_attribute_filter_narrows_the_page_like_a_product_filter():
     """Brand and processor are only another way of naming SKUs, so they reach
     the same scope and every section below moves with them."""
@@ -158,17 +189,28 @@ def test_no_block_leaves_a_pair_of_dollar_signs_unescaped(page):
     assert offenders == []
 
 
-def test_the_chart_draws_one_trace_per_strict_product(page):
-    """A matched pair at parity overlaps exactly, so the second line can be
-    hidden under the first and the chart reads as a single product. The traces
-    are counted rather than trusted to be visible."""
+def test_the_chart_draws_every_tracked_product(page):
+    """A reader asks where all four machines sit, so all four are plotted. The
+    traces are counted rather than trusted to be visible: a matched pair at
+    parity overlaps exactly, and the second line can hide under the first."""
     traces = json.loads(page.get("plotly_chart")[0].proto.spec)["data"]
-    assert len(traces) == 2
-    assert {trace["name"] for trace in traces} == {
-        "Lenovo Yoga 7a 2-in-1 14in", "HP OmniBook X Flip 2-in-1 14in"}
+    assert len(traces) == 4
     # The one drawn second must let the first show through, or counting is moot.
     assert traces[1]["line"]["dash"] != "solid"
     assert traces[1]["marker"]["symbol"].endswith("-open")
+
+
+def test_the_chart_separates_the_pair_from_the_context(page):
+    """Plotting the reference SKUs must not invite a comparison the rule
+    refuses. They lead the eye less, and say so in the legend."""
+    traces = json.loads(page.get("plotly_chart")[0].proto.spec)["data"]
+    strict = [t for t in traces if "(reference)" not in t["name"]]
+    reference = [t for t in traces if "(reference)" in t["name"]]
+    assert len(strict) == 2 and len(reference) == 2
+    assert {t["name"] for t in strict} == {
+        "Lenovo Yoga 7a 2-in-1 14in", "HP OmniBook X Flip 2-in-1 14in"}
+    assert all(t.get("opacity", 1) < 1 for t in reference)
+    assert all(t.get("opacity", 1) == 1 for t in strict)
 
 
 def test_every_product_stays_in_the_table(page):

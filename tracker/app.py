@@ -12,6 +12,7 @@ import sys
 from dataclasses import replace
 from datetime import datetime, time
 from pathlib import Path
+from typing import Any
 
 # Streamlit executes this file directly, so the interpreter puts tracker/ on
 # sys.path rather than the project root and `import tracker.x` fails. An
@@ -29,8 +30,10 @@ import streamlit as st
 
 from tracker.insights import (
     CHANGE_KINDS,
+    KIND_GROUPS,
     Scope,
     detect,
+    prefer,
     select_by_score,
     select_with_model,
 )
@@ -116,6 +119,23 @@ def filter_label(column: str) -> str:
 
 
 COLOURS = ["#1f4e9c", "#d1495b", "#2a9d8f", "#6c757d"]
+
+#: Reference SKUs are context, not comparison. They are on the chart because a
+#: reader asks where the other tracked machines sit, and muted because reading
+#: a difference off them would be attributing it to whichever field one
+#: happens to notice.
+#:
+#: Muted, but not all the same muted: one grey for every reference SKU reads
+#: as a single product until you hover, and the count of them is the thing
+#: that grows. These stay low-contrast against the strict pair while staying
+#: separable from each other.
+REFERENCE_COLOURS = ["#9aa3ad", "#b0a08f", "#93a8a0", "#a79aad",
+                     "#a8a26f", "#8f9fb3", "#b39a9a", "#8fa8a8"]
+
+#: Past this many series a line chart stops being read and starts being
+#: decoded. The filters are the answer, so the page says so rather than
+#: silently drawing something unreadable.
+CROWDED_CHART = 6
 DASHES = ["solid", "dash", "dot", "dashdot"]
 MARKERS = ["circle", "circle-open", "diamond-open", "x"]
 SIZES = [13, 9, 9, 9]
@@ -154,13 +174,41 @@ names = dict(zip(data.products["sku"],
 
 eligible = data.products
 
+#: Filters the reader has actually narrowed, label to chosen values. Kept so
+#: an empty result can name what emptied it. With a dozen controls, "widen the
+#: selection" is not an instruction, it is a search.
+narrowed: dict[str, list[Any]] = {}
+
+
+def option_counts(column: str, values: list[Any]) -> dict[Any, int]:
+    """How many products each option would leave, given the other filters.
+
+    Intersecting filters have dead ends: every choice is reasonable alone and
+    the combination matches nothing. Cascading avoids that by removing options,
+    which silently drops selections another control is still holding and makes
+    the result depend on the order they were touched. Counting instead keeps
+    every option reachable and puts the dead end where it can be seen before it
+    is chosen: an option reading `(0)` is one that empties the page.
+
+    The other filters are read from session state, which on a rerun already
+    holds what the reader last chose.
+    """
+    others = data.products
+    for other in filterable_columns(data.products):
+        if other == column:
+            continue
+        chosen = st.session_state.get(f"filter_{other}")
+        if chosen is not None:
+            others = others[others[other].isin(chosen)]
+    counted = others[column].value_counts()
+    return {value: int(counted.get(value, 0)) for value in values}
+
 
 def attribute_filter(column: str, label: str) -> None:
     """One control for one column, or none at all.
 
     Options come from the whole master rather than from what the other filters
-    have already left. Cascading looks tidier and is worse: narrowing one
-    control would drop values another control is still holding.
+    have already left, and carry the count they would leave.
     """
     global eligible
     if column not in data.products.columns:
@@ -168,13 +216,24 @@ def attribute_filter(column: str, label: str) -> None:
     values = sorted(data.products[column].dropna().unique().tolist())
     if len(values) < 2:
         return
-    kept = st.multiselect(label, options=values, default=values,
-                          key=f"filter_{column}")
+    counts = option_counts(column, values)
+    kept = st.multiselect(
+        label, options=values, default=values, key=f"filter_{column}",
+        format_func=lambda v: f"{v}  ({counts.get(v, 0)})")
+    if set(kept) != set(values):
+        narrowed[label] = kept
     eligible = eligible[eligible[column].isin(kept)]
 
 
 with st.sidebar:
     st.header("Selection")
+
+    if st.button("Reset filters", width="stretch"):
+        for stale in [k for k in st.session_state if k.startswith("filter_")]:
+            del st.session_state[stale]
+        st.session_state.pop("products", None)
+        st.session_state.pop("lead_with", None)
+        st.rerun()
 
     # The window comes first: this is a tracker, so when is the outer question
     # and everything else narrows inside it.
@@ -209,6 +268,21 @@ with st.sidebar:
     # rather than quietly preferring one of the two.
     picked = [sku for sku in picked if sku in set(eligible["sku"])]
 
+    # Not a filter. Readers arrive with different questions, and the score
+    # cannot know which one; asking is cheaper and more honest than inferring,
+    # and nothing is hidden either way.
+    st.divider()
+    st.caption("**Lead with** · reorders the findings, hides nothing")
+    lead = st.multiselect("Lead with", options=list(KIND_GROUPS),
+                          default=list(KIND_GROUPS), key="lead_with",
+                          label_visibility="collapsed")
+
+    st.caption(f"{len(picked)} of {len(data.products)} products match")
+    if narrowed:
+        st.caption("Narrowed by: " + ", ".join(
+            f"{label} ({', '.join(str(v) for v in values) or 'nothing'})"
+            for label, values in narrowed.items()))
+
 start = end = None
 # The full range is not a filter. Normalising it to None is what `skus` already
 # does below, and without it the untouched page reports a selection it has not
@@ -233,8 +307,17 @@ if st.session_state.get("scope_key") != scope.key():
 settings, missing_reason = settings_or_reason(os.environ)
 
 if scoped.empty:
-    st.warning("The current selection contains no observations. Widen it in "
-               "the sidebar.")
+    if narrowed:
+        st.warning(
+            "The current selection contains no observations. These filters "
+            "are narrowing it, and they combine: "
+            + "; ".join(f"**{label}** kept "
+                        f"{', '.join(str(v) for v in values) or 'nothing'}"
+                        for label, values in narrowed.items())
+            + ". Widening any one of them may be enough.")
+    else:
+        st.warning("The current selection contains no observations. Widen the "
+                   "product or date choice in the sidebar.")
     st.stop()
 
 if filtered:
@@ -247,7 +330,7 @@ st.caption(f"Last observation {scoped['captured_at'].max():%Y-%m-%d %H:%M} · "
            f"{len(scoped)} snapshots · "
            f"{points} capture time(s) covering the strict group")
 
-found = detect(scoped, data.products)
+found = prefer(detect(scoped, data.products), lead)
 
 # ------------------------------------------------------- headline result
 # The question the page exists to answer, above the evidence for it. A reader
@@ -257,12 +340,26 @@ comparison = strict_comparison(scoped, data.products)
 names = dict(zip(data.products["sku"],
                  data.products["brand"] + " " + data.products["model_name"]))
 
+# A headline of prices alone says "nothing happened" in a window where the
+# prices held and the availability did not. The count of everything else that
+# moved sits beside them, so the first screen carries both halves.
+movements = [i for i in found if i.kind in CHANGE_KINDS]
+latest_at = scoped["captured_at"].max()
+recent = [i for i in movements if i.facts.get("at") == f"{latest_at:%Y-%m-%dT%H:%M}"]
+
 if comparison["comparable"]:
-    columns = st.columns(len(comparison["rows"]) + 2)
+    columns = st.columns(len(comparison["rows"]) + 3)
     for column, row in zip(columns, comparison["rows"]):
         column.metric(names.get(row["sku"], row["sku"]), f"${row['price']:,.2f}")
-    columns[-2].metric("Price difference", f"${comparison['delta']:,.2f}")
-    columns[-1].metric("Capture times", points)
+    columns[-3].metric("Price difference", f"${comparison['delta']:,.2f}")
+    columns[-2].metric("Capture times", points)
+    columns[-1].metric(
+        "Movements", len(movements),
+        delta=(f"{len(recent)} at the latest capture" if recent else None),
+        delta_color="off",
+        help="Every change between consecutive captures in the selection, "
+             "price or not: stock notes, pickup dates, availability. Listed "
+             "in section 2.")
     if comparison["parity"]:
         st.success(usd(
             f"**The matched pair is at price parity.** Both SKUs were listed "
@@ -281,30 +378,50 @@ else:
 st.divider()
 
 # --------------------------------------------------------------- 1. trend
-st.header("1. Price over time — strict equivalence group")
+st.header("1. Price over time")
+st.caption("Every tracked product is plotted. The two that satisfy the "
+           "equivalence rule are drawn in full; the two reference SKUs are "
+           "muted, because each differs from the pair on more than one field "
+           "and neither enters the price-difference metric.")
 
 strict = data.products[data.products["role"] == "strict"]
+# Strict first, so the pair takes the strong colours and sits on top of the
+# context rather than under it.
+ordered = pd.concat([strict, data.products[data.products["role"] != "strict"]])
+
 figure = go.Figure()
-for index, product in enumerate(strict.itertuples()):
+for index, product in enumerate(ordered.itertuples()):
     line = series_for(scoped, product.sku)
     if line.empty:
         continue
+    is_strict = product.role == "strict"
     name = f"{product.brand} {product.model_name}"
+    if not is_strict:
+        name += "  (reference)"
+    colour = (COLOURS[index % len(COLOURS)] if is_strict
+              else REFERENCE_COLOURS[index % len(REFERENCE_COLOURS)])
     figure.add_trace(go.Scatter(
         x=line["captured_at"], y=line["price"], mode="lines+markers", name=name,
-        line=dict(dash=DASHES[index % len(DASHES)], width=2,
-                  color=COLOURS[index % len(COLOURS)]),
+        legendrank=index,
+        line=dict(dash=DASHES[index % len(DASHES)],
+                  width=2 if is_strict else 1, color=colour),
         marker=dict(symbol=MARKERS[index % len(MARKERS)],
-                    size=SIZES[index % len(SIZES)],
-                    color=COLOURS[index % len(COLOURS)],
-                    line=dict(width=2, color=COLOURS[index % len(COLOURS)])),
+                    size=SIZES[index % len(SIZES)] if is_strict else 7,
+                    color=colour, line=dict(width=2, color=colour)),
+        opacity=1.0 if is_strict else 0.55,
         hovertemplate="%{x|%b %d %H:%M}<br>$%{y:.2f}<extra>" + name + "</extra>",
     ))
 figure.update_layout(yaxis_title="Price (USD)",
                      xaxis_title="Captured at (Asia/Taipei)",
-                     hovermode="x unified", height=420,
-                     legend=dict(orientation="h", y=-0.25))
+                     hovermode="x unified", height=440,
+                     legend=dict(orientation="h", y=-0.3))
 st.plotly_chart(figure, width="stretch")
+
+if len(figure.data) > CROWDED_CHART:
+    st.caption(f"{len(figure.data)} series are plotted. A line chart stops "
+               f"being readable somewhere around {CROWDED_CHART}; narrow the "
+               f"sidebar by brand, processor or role to compare a few at a "
+               f"time. The equivalence group is always the two drawn in full.")
 
 # A reader who sees one line where the legend names two will not assume parity;
 # they will assume the chart is broken. So the coincidence is stated.
@@ -361,9 +478,12 @@ else:
         st.markdown(usd(f"**{ranking.framing}**"))
     for item in ranking.insights:
         st.markdown(usd(f"- {item.sentence}"))
+    led = [g for g in lead if g in KIND_GROUPS]
+    order = ("by score" if len(led) in (0, len(KIND_GROUPS))
+             else f"by score, with {' and '.join(led)} read first")
     st.caption("Selected by the language model from the scored candidates."
                if ranking.source == "model"
-               else "Selected by score. No model was involved.")
+               else f"Selected {order}. No model was involved.")
 
     with st.expander(f"All {len(found)} findings, and how each was ranked"):
         st.caption("priority = magnitude x recency x scope x rarity. It orders "
