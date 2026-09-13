@@ -260,16 +260,38 @@ def test_a_stored_summary_is_shown_instead_of_the_template(
     text = body_text(app)
     assert prose in text
     assert "Latest listed price per product" not in text
-    assert "checked against the computed values before it was stored" in text
+    assert "found among the computed values before it was stored" in text
 
 
-def test_a_stored_summary_older_than_the_data_is_flagged_as_stale(
+def test_a_stored_summary_older_than_the_data_is_replaced_not_annotated(
         without_llm_env, stored_summary):
-    stored_summary(last_capture="2026-09-01T09:00")
+    """Showing stale prose first and qualifying it afterwards means the wrong
+    figures are the ones read. The computed summary takes its place."""
+    stale = stored_summary(last_capture="2026-09-12T15:07",
+                           prose="Prose written before the later captures.")
     app = run_app()
-    warnings = " ".join(w.value for w in app.warning)
-    assert "predates the latest observation" in warnings
-    assert "2026-09-01T09:00" in warnings
+    said = body_text(app)
+    assert "does not describe" in said
+    assert stale not in said
+
+
+def test_a_stored_summary_is_replaced_under_a_selection(
+        without_llm_env, stored_summary):
+    """It describes the whole table as it stood when it was written, which is
+    not what a filtered page is showing."""
+    prose = stored_summary()
+    app = run_app().sidebar.multiselect(key="filter_brand").set_value(
+        ["Lenovo"]).run()
+    assert prose not in body_text(app)
+
+
+def test_the_table_lists_the_selected_products_only(page):
+    """Joining from the whole master would put every excluded product back as
+    a row of blanks, which reads as missing data rather than as excluded."""
+    narrowed = run_app().sidebar.multiselect(key="filter_brand").set_value(
+        ["Lenovo"]).run()
+    table = narrowed.dataframe[-1].value
+    assert set(table["brand"]) == {"Lenovo"}
 
 
 def test_a_current_stored_summary_is_not_flagged_as_stale(

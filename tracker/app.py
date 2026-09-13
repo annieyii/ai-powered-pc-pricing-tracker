@@ -511,7 +511,7 @@ summary_area = st.container()
 context = build_context(view, data.products)
 stored = read_stored_summary()
 if st.button("Regenerate with the language model", disabled=settings is None):
-    with st.spinner("Asking the model, then checking every figure it returns"):
+    with st.spinner("Asking the model, then looking up every figure it returns"):
         try:
             st.session_state["summary_run"] = (
                 *summarise(context, build_client(settings), settings.model),
@@ -536,7 +536,7 @@ with summary_area:
     if run and run[2] == "model":
         st.markdown(usd(run[0]))
         st.caption("Written by the language model in this session. Every figure "
-                   "in it was checked against the computed values before it was "
+                   "in it was found among the computed values before it was "
                    "displayed. Not stored yet.")
     elif run:
         st.warning(
@@ -547,18 +547,28 @@ with summary_area:
         st.markdown(usd(template_summary(context)))
         st.caption("Computed directly from the recorded observations. No model "
                    "output is used here.")
+    elif stored is not None and (filtered or stored_is_stale(stored, context)):
+        # A stored summary describes the whole table as it stood when it was
+        # written. Under a selection, or after a newer capture, it describes
+        # something the reader is not looking at. Showing it first and
+        # qualifying it afterwards means the wrong figures are read first, so
+        # it is replaced rather than annotated.
+        reason = ("the current selection" if filtered
+                  else f"observations up to {stored.last_capture}, and the "
+                       f"newest snapshot is from {context['last_capture']}")
+        st.warning(f"The stored summary in `data/summary.md` does not describe "
+                   f"{reason}. The computed summary for what is on screen is "
+                   f"shown instead.")
+        st.markdown(usd(template_summary(context)))
+        st.caption("Computed directly from the recorded observations. No model "
+                   "output is used here.")
     elif stored is not None:
         st.markdown(usd(stored.prose))
         st.caption(f"Written by `{stored.model}` on {stored.generated_at} and "
-                   f"stored in `data/summary.md`. Every figure in it was checked "
-                   f"against the computed values before it was stored.")
-        if stored_is_stale(stored, context):
-            st.warning(
-                f"This stored summary was generated from observations up to "
-                f"{stored.last_capture}, and the newest snapshot is from "
-                f"{context['last_capture']}. It predates the latest "
-                f"observation and may no longer describe what the chart above "
-                f"shows.")
+                   f"stored in `data/summary.md`. Every figure in it was found "
+                   f"among the computed values before it was stored; that check "
+                   f"bounds invention, not whether a figure is attached to the "
+                   f"right product.")
     else:
         st.markdown(usd(template_summary(context)))
         st.caption("Computed directly from the recorded observations by string "
@@ -568,9 +578,12 @@ with summary_area:
 # ------------------------------------------------------------ 3. snapshot
 st.header("4. Latest observation per product")
 
-# Left join from products so a product with no usable snapshot stays visible
-# instead of disappearing from the comparison.
-table = data.products.merge(latest, on="sku", how="left")
+# Left join so a selected product with no usable snapshot stays visible instead
+# of disappearing from the comparison. Joining from the whole master instead
+# would put every unselected product back on the page as a row of blanks, which
+# reads as missing data rather than as an excluded product.
+table = data.products[data.products["sku"].isin(picked)].merge(
+    latest, on="sku", how="left")
 st.dataframe(
     table[["role", "brand", "model_name", "cpu", "form_factor", "display_type",
            "brightness_nits", "price", "regular_price", "savings",
