@@ -186,14 +186,33 @@ def ingest_products(conn: sqlite3.Connection, csv_path: Path | str) -> int:
     return count
 
 
+def extra_price_columns(frame: pd.DataFrame) -> list[str]:
+    """Observation columns the landing file carries that the schema does not.
+
+    The same reasoning as for the product master, and the same guard. A field
+    a capture starts recording mid-window, or one a feed returns, reaches the
+    page on the next reload instead of being dropped at ingest.
+    """
+    unknown = [c for c in frame.columns if c not in PRICE_CSV_COLUMNS]
+    bad = [c for c in unknown if not SAFE_COLUMN.match(str(c))]
+    if bad:
+        raise ValueError(f"prices file has unusable column names: {bad}")
+    return unknown
+
+
 def ingest_prices(conn: sqlite3.Connection, csv_path: Path | str) -> IngestResult:
-    frame = pd.read_csv(csv_path, dtype={"sku": str})
+    frame = pd.read_csv(csv_path, dtype=str, keep_default_na=False)
     missing = [c for c in PRICE_CSV_COLUMNS if c not in frame.columns]
     if missing:
         raise ValueError(f"prices file missing columns: {missing}")
 
-    statement = (f"INSERT INTO price_snapshots ({', '.join(PRICE_FIELDS)}) "
-                 f"VALUES ({', '.join('?' for _ in PRICE_FIELDS)})")
+    extra = extra_price_columns(frame)
+    for column in extra:
+        conn.execute(f"ALTER TABLE price_snapshots ADD COLUMN {column} TEXT")
+
+    fields = PRICE_FIELDS + extra
+    statement = (f"INSERT INTO price_snapshots ({', '.join(fields)}) "
+                 f"VALUES ({', '.join('?' for _ in fields)})")
 
     rejected: list[Rejection] = []
     accepted = 0
@@ -221,7 +240,7 @@ def ingest_prices(conn: sqlite3.Connection, csv_path: Path | str) -> IngestResul
             _cell(record["seller"]),
             _cell(record["stock_hint"]),
             _cell(record["note"]),
-        ]
+        ] + [_cell(record[column]) for column in extra]
 
         try:
             conn.execute(statement, values)
@@ -239,9 +258,10 @@ def read_products(conn: sqlite3.Connection) -> pd.DataFrame:
 
 
 def read_prices(conn: sqlite3.Connection) -> pd.DataFrame:
+    # Every column, so one the schema does not name still reaches the page.
     frame = pd.read_sql_query(
-        f"SELECT {', '.join(PRICE_FIELDS)} FROM price_snapshots "
-        f"ORDER BY captured_at, sku", conn, dtype={"sku": str})
+        "SELECT * FROM price_snapshots ORDER BY captured_at, sku",
+        conn, dtype={"sku": str})
     frame["captured_at"] = pd.to_datetime(frame["captured_at"],
                                           format=TIMESTAMP_FORMAT)
     for column in MONEY_COLUMNS:

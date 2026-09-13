@@ -175,12 +175,20 @@ def fetch(sku: str, api_key: str,
 
 
 def append_rows(rows: list[dict[str, Any]], path: Path = PRICES_CSV) -> int:
-    """Append to the landing file in its existing column order."""
+    """Append to the landing file in the column order its own header states.
+
+    The header is read rather than assumed. The landing file gains columns
+    (pickup_eta was added mid-window), and writing the nine this module knows
+    into a ten-column file would shift every later value one column left
+    without raising anything. A column this adapter cannot fill is left blank.
+    """
+    with open(path, newline="", encoding="utf-8") as handle:
+        header = next(csv.reader(handle), None) or PRICE_CSV_COLUMNS
     with open(path, "a", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=PRICE_CSV_COLUMNS)
+        writer = csv.DictWriter(handle, fieldnames=header)
         for row in rows:
-            writer.writerow({c: ("" if row[c] is None else row[c])
-                             for c in PRICE_CSV_COLUMNS})
+            writer.writerow({c: ("" if row.get(c) is None else row[c])
+                             for c in header})
     return len(rows)
 
 

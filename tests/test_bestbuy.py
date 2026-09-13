@@ -157,3 +157,24 @@ def test_a_sold_out_row_without_a_price_is_still_accepted(tmp_path):
     conn.close()
 
     assert result.rejected == []
+
+
+def test_rows_follow_the_landing_files_own_header(tmp_path):
+    """The landing file gained a column mid-window. Writing the nine columns
+    this adapter knows into a ten-column file would shift every later value
+    left by one and raise nothing, so the header is read, not assumed."""
+    path = tmp_path / "prices.csv"
+    path.write_text(HEADER.replace("stock_hint,note", "stock_hint,pickup_eta,note"),
+                    encoding="utf-8")
+    append_rows([row_from(ON_SALE, AT)], path)
+
+    conn = connect(":memory:")
+    init_db(conn)
+    ingest_products(conn, PRODUCTS_CSV)
+    result = ingest_prices(conn, path)
+    conn.close()
+
+    assert result.rejected == []
+    line = path.read_text(encoding="utf-8").splitlines()[1].split(",")
+    assert line[-2] == ""            # pickup_eta, which the API does not give
+    assert line[-1].startswith("captured via")
