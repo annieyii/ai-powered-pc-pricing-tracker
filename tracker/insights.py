@@ -47,7 +47,7 @@ ADD_TO_CART = "Add to cart"
 #: Kinds that describe a movement, as opposed to a state or its absence.
 CHANGE_KINDS = frozenset({
     "price_change", "parity_broken", "gap_widened", "gap_narrowed",
-    "availability_lost",
+    "availability_lost", "stock_shift",
 })
 
 
@@ -132,6 +132,7 @@ RARITY = {
     "parity_broken": 0.85,
     "gap_widened": 0.75,
     "gap_narrowed": 0.75,
+    "stock_shift": 0.65,
     "promotion_ending": 0.60,
     "promotion_active": 0.45,
     "stock_scarcity": 0.35,
@@ -282,6 +283,13 @@ def _render_stock_scarcity(f: dict[str, Any]) -> str:
             f"\"{f['stock_hint']}\" at {f['at']}.")
 
 
+def _render_stock_shift(f: dict[str, Any]) -> str:
+    was = f["previous_stock_hint"] or "no stock note"
+    now = f["stock_hint"] or "no stock note"
+    return (f"The stock note on {f['name']} changed from {was!r} to {now!r} "
+            f"between {f['previous_at']} and {f['at']}.")
+
+
 def _render_availability_lost(f: dict[str, Any]) -> str:
     return (f"{f['name']} moved from {f['previous_availability']} to "
             f"{f['availability']} between {f['previous_at']} and {f['at']}.")
@@ -301,6 +309,7 @@ RENDERERS: dict[str, Callable[[dict[str, Any]], str]] = {
     "promotion_active": _render_promotion_active,
     "promotion_ending": _render_promotion_ending,
     "stock_scarcity": _render_stock_scarcity,
+    "stock_shift": _render_stock_shift,
     "availability_lost": _render_availability_lost,
     "no_change": _render_no_change,
 }
@@ -450,6 +459,20 @@ def detect(prices: pd.DataFrame, products: pd.DataFrame,
                      "at": _stamp(current["captured_at"]),
                      "previous_at": _stamp(previous["captured_at"])},
                     change=now - was, reference=reference))
+
+            # A standing stock note says what stock looks like now. A changed
+            # one says something happened, which is the observation a
+            # price-only page drops: a window can hold no price movement at
+            # all and still hold plenty of movement.
+            wasnote = str(_value(previous, "stock_hint") or "")
+            nownote = str(_value(current, "stock_hint") or "")
+            if wasnote != nownote:
+                found.append(build(
+                    "stock_shift", (sku,), current["captured_at"],
+                    {"sku": sku, "name": name_of(sku), "stock_hint": nownote,
+                     "previous_stock_hint": wasnote,
+                     "at": _stamp(current["captured_at"]),
+                     "previous_at": _stamp(previous["captured_at"])}))
 
             before = _value(previous, "availability")
             after = _value(current, "availability")

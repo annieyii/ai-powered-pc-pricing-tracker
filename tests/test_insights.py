@@ -253,6 +253,35 @@ def test_stock_scarcity_is_silent_on_a_blank_hint():
     assert "stock_scarcity" not in kinds(found)
 
 
+def test_a_changed_stock_note_is_reported_as_a_movement():
+    """A window can hold no price movement and still hold movement. The note
+    moving from one store to another is the observation a price-only page
+    drops, and it was the only thing that moved on the real captures."""
+    found = detect(prices([
+        snap(DELL, T1, 999.99, stock_hint="Only 1 left at your store!"),
+        snap(DELL, T3, 999.99, stock_hint="Only 1 left at nearby store!")]),
+        BOTH_STRICT)
+    shift = only(found, "stock_shift")
+    assert shift.facts["previous_stock_hint"] == "Only 1 left at your store!"
+    assert shift.facts["stock_hint"] == "Only 1 left at nearby store!"
+
+
+def test_a_stock_note_that_appears_or_goes_away_is_also_a_movement():
+    """Blank is a value here. A note that was there and is not says as much as
+    a note that changed wording."""
+    found = detect(prices([snap(DELL, T1, 999.99),
+                           snap(DELL, T3, 999.99, stock_hint="Only 1 left!")]),
+                   BOTH_STRICT)
+    assert only(found, "stock_shift").facts["previous_stock_hint"] == ""
+
+
+def test_an_unchanged_stock_note_is_not_a_movement():
+    found = detect(prices([snap(DELL, T1, 999.99, stock_hint="Only 1 left!"),
+                           snap(DELL, T3, 999.99, stock_hint="Only 1 left!")]),
+                   BOTH_STRICT)
+    assert "stock_shift" not in kinds(found)
+
+
 def test_availability_lost_fires_when_the_cart_button_went_away():
     found = detect(prices([snap(LENOVO, T1, 1299.99),
                            snap(LENOVO, T3, None, availability="Sold Out")]),
