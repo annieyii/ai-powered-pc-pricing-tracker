@@ -27,7 +27,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 import pandas as pd
 
@@ -47,8 +47,22 @@ ADD_TO_CART = "Add to cart"
 #: Kinds that describe a movement, as opposed to a state or its absence.
 CHANGE_KINDS = frozenset({
     "price_change", "parity_broken", "gap_widened", "gap_narrowed",
-    "availability_lost", "stock_shift",
+    "availability_lost", "field_shift",
 })
+
+#: Observation columns a generic change detector does not report, because a
+#: sharper detector already does (price, availability, the promotion figures),
+#: because they identify rather than describe (sku, captured_at), or because
+#: they are prose and every rewording would read as a movement (note). Every
+#: other column is watched, including ones the schema has never named.
+NOT_WATCHED = frozenset({"sku", "captured_at", "price", "regular_price",
+                         "savings", "availability", "note"})
+
+#: Words a sentence uses for a watched column. Anything else is spelled from
+#: its own name, so a new column is readable before anyone writes it down.
+FIELD_LABELS = {"stock_hint": "stock note",
+                "pickup_eta": "Union Square pickup date",
+                "seller": "seller"}
 
 
 # --- scope --------------------------------------------------------------
@@ -132,7 +146,7 @@ RARITY = {
     "parity_broken": 0.85,
     "gap_widened": 0.75,
     "gap_narrowed": 0.75,
-    "stock_shift": 0.65,
+    "field_shift": 0.65,
     "promotion_ending": 0.60,
     "promotion_active": 0.45,
     "stock_scarcity": 0.35,
@@ -283,10 +297,10 @@ def _render_stock_scarcity(f: dict[str, Any]) -> str:
             f"\"{f['stock_hint']}\" at {f['at']}.")
 
 
-def _render_stock_shift(f: dict[str, Any]) -> str:
-    was = f["previous_stock_hint"] or "no stock note"
-    now = f["stock_hint"] or "no stock note"
-    return (f"The stock note on {f['name']} changed from {was!r} to {now!r} "
+def _render_field_shift(f: dict[str, Any]) -> str:
+    was = f["previous_value"] or "none shown"
+    now = f["value"] or "none shown"
+    return (f"The {f['label']} on {f['name']} changed from {was} to {now} "
             f"between {f['previous_at']} and {f['at']}.")
 
 
@@ -309,7 +323,7 @@ RENDERERS: dict[str, Callable[[dict[str, Any]], str]] = {
     "promotion_active": _render_promotion_active,
     "promotion_ending": _render_promotion_ending,
     "stock_scarcity": _render_stock_scarcity,
-    "stock_shift": _render_stock_shift,
+    "field_shift": _render_field_shift,
     "availability_lost": _render_availability_lost,
     "no_change": _render_no_change,
 }
@@ -441,6 +455,7 @@ def detect(prices: pd.DataFrame, products: pd.DataFrame,
 
     found: list[Insight] = []
     strict_changed = False
+    watched = [c for c in rows.columns if c not in NOT_WATCHED]
 
     # --- per SKU: movement between one observation and the next ---------
     for sku, group in rows.groupby(rows["sku"].astype(str), sort=True):
@@ -460,19 +475,22 @@ def detect(prices: pd.DataFrame, products: pd.DataFrame,
                      "previous_at": _stamp(previous["captured_at"])},
                     change=now - was, reference=reference))
 
-            # A standing stock note says what stock looks like now. A changed
-            # one says something happened, which is the observation a
-            # price-only page drops: a window can hold no price movement at
-            # all and still hold plenty of movement.
-            wasnote = str(_value(previous, "stock_hint") or "")
-            nownote = str(_value(current, "stock_hint") or "")
-            if wasnote != nownote:
-                found.append(build(
-                    "stock_shift", (sku,), current["captured_at"],
-                    {"sku": sku, "name": name_of(sku), "stock_hint": nownote,
-                     "previous_stock_hint": wasnote,
-                     "at": _stamp(current["captured_at"]),
-                     "previous_at": _stamp(previous["captured_at"])}))
+            # A window can hold no price movement and plenty of other movement,
+            # and a price-only page drops all of it. Every descriptive column
+            # is compared, not a list of the ones known today, so a field a
+            # capture starts recording is watched from its first change.
+            for field in watched:
+                was_value = str(_value(previous, field) or "")
+                now_value = str(_value(current, field) or "")
+                if was_value != now_value:
+                    found.append(build(
+                        "field_shift", (sku,), current["captured_at"],
+                        {"sku": sku, "name": name_of(sku), "field": field,
+                         "label": FIELD_LABELS.get(
+                             field, field.replace("_", " ")),
+                         "value": now_value, "previous_value": was_value,
+                         "at": _stamp(current["captured_at"]),
+                         "previous_at": _stamp(previous["captured_at"])}))
 
             before = _value(previous, "availability")
             after = _value(current, "availability")
@@ -629,6 +647,40 @@ class Selection:
     insights: tuple[Insight, ...]
     framing: str | None
     source: str
+
+
+#: Kinds grouped by the question a reader arrives with. The order findings
+#: come out in is a score, which is a property of the data. The order they are
+#: read in is a preference, which only the reader has. Keeping the two apart is
+#: the point: a score that tried to encode the preference would be guessing at
+#: something nobody has to guess at, because the reader can simply say.
+KIND_GROUPS: dict[str, tuple[str, ...]] = {
+    "Price movement": ("price_change", "parity_broken",
+                       "gap_widened", "gap_narrowed"),
+    "Availability and stock": ("availability_lost", "field_shift",
+                               "stock_scarcity"),
+    "Promotions": ("promotion_active", "promotion_ending"),
+    "Like-for-like position": ("parity_held", "no_change"),
+}
+
+
+def prefer(insights: list[Insight], groups: Sequence[str]) -> list[Insight]:
+    """Findings reordered so the chosen groups lead, score breaking ties.
+
+    Nothing is hidden. A preference says what to read first, not what to keep,
+    so a reader who asks for availability still sees the price findings under
+    it and cannot be misled by their absence.
+
+    Choosing everything, or nothing, leaves the scored order untouched: the
+    default page is the one the score alone produces, and the control has to be
+    used before it changes anything.
+    """
+    chosen = [g for g in groups if g in KIND_GROUPS]
+    if not chosen or len(chosen) == len(KIND_GROUPS):
+        return list(insights)
+    wanted = {kind for group in chosen for kind in KIND_GROUPS[group]}
+    return sorted(insights,
+                  key=lambda i: (i.kind not in wanted, -i.significance, i.kind))
 
 
 def select_by_score(insights: list[Insight], k: int = 3) -> Selection:

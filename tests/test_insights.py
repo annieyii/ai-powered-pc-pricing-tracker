@@ -13,6 +13,8 @@ import pandas as pd
 import pytest
 
 from tracker.insights import (
+    KIND_GROUPS,
+    prefer,
     RENDERERS,
     Insight,
     Scope,
@@ -256,30 +258,53 @@ def test_stock_scarcity_is_silent_on_a_blank_hint():
 def test_a_changed_stock_note_is_reported_as_a_movement():
     """A window can hold no price movement and still hold movement. The note
     moving from one store to another is the observation a price-only page
-    drops, and it was the only thing that moved on the real captures."""
+    drops, and it was the first thing that moved on the real captures."""
     found = detect(prices([
         snap(DELL, T1, 999.99, stock_hint="Only 1 left at your store!"),
         snap(DELL, T3, 999.99, stock_hint="Only 1 left at nearby store!")]),
         BOTH_STRICT)
-    shift = only(found, "stock_shift")
-    assert shift.facts["previous_stock_hint"] == "Only 1 left at your store!"
-    assert shift.facts["stock_hint"] == "Only 1 left at nearby store!"
+    shift = only(found, "field_shift")
+    assert shift.facts["field"] == "stock_hint"
+    assert shift.facts["previous_value"] == "Only 1 left at your store!"
+    assert shift.facts["value"] == "Only 1 left at nearby store!"
 
 
-def test_a_stock_note_that_appears_or_goes_away_is_also_a_movement():
+def test_a_value_that_appears_or_goes_away_is_also_a_movement():
     """Blank is a value here. A note that was there and is not says as much as
     a note that changed wording."""
     found = detect(prices([snap(DELL, T1, 999.99),
                            snap(DELL, T3, 999.99, stock_hint="Only 1 left!")]),
                    BOTH_STRICT)
-    assert only(found, "stock_shift").facts["previous_stock_hint"] == ""
+    assert only(found, "field_shift").facts["previous_value"] == ""
 
 
-def test_an_unchanged_stock_note_is_not_a_movement():
+def test_an_unchanged_value_is_not_a_movement():
     found = detect(prices([snap(DELL, T1, 999.99, stock_hint="Only 1 left!"),
                            snap(DELL, T3, 999.99, stock_hint="Only 1 left!")]),
                    BOTH_STRICT)
-    assert "stock_shift" not in kinds(found)
+    assert "field_shift" not in kinds(found)
+
+
+def test_a_column_nobody_listed_is_watched_from_its_first_change():
+    """The detector compares every descriptive column rather than a list of
+    the ones known today. pickup_eta was added to the landing file mid-window,
+    and its slip from today to Thu Sep 17 was the movement nothing could see
+    while it lived in the free-text note."""
+    frame = prices([snap(DELL, T1, 999.99), snap(DELL, T3, 999.99)])
+    frame["pickup_eta"] = ["today", "2026-09-17"]
+    shift = only(detect(frame, BOTH_STRICT), "field_shift")
+    assert shift.facts["field"] == "pickup_eta"
+    assert "pickup date" in shift.sentence
+
+
+def test_prose_and_fields_with_their_own_detector_are_not_repeated():
+    """A reworded note is not a movement, and a price change is already
+    reported by the price detector with a sharper sentence."""
+    found = detect(prices([snap(DELL, T1, 999.99, note="first wording"),
+                           snap(DELL, T3, 899.99, note="second wording")]),
+                   BOTH_STRICT)
+    assert "field_shift" not in kinds(found)
+    assert "price_change" in kinds(found)
 
 
 def test_availability_lost_fires_when_the_cart_button_went_away():
@@ -714,3 +739,56 @@ def test_an_insight_is_frozen():
     insight = Insight(kind="no_change", subjects=(LENOVO,), at=None)
     with pytest.raises(Exception):
         insight.kind = "price_change"
+
+
+# --- reading order is a preference, not a score --------------------------
+
+def four_captures():
+    """Enough to raise findings of more than one group."""
+    return detect(prices([
+        snap(LENOVO, T1, 1299.99, stock_hint="Only 1 left!"),
+        snap(HP, T1, 1299.99),
+        snap(DELL, T1, 999.99, regular_price=1299.99, savings=300.0),
+        snap(LENOVO, T3, 1299.99),
+        snap(HP, T3, 1299.99),
+        snap(DELL, T3, 999.99, regular_price=1299.99, savings=300.0),
+    ]), BOTH_STRICT)
+
+
+def test_a_stated_preference_leads_without_hiding_anything():
+    """A preference says what to read first, not what to keep. A reader who
+    asks for availability still sees the price findings under it and cannot be
+    misled by their absence."""
+    found = four_captures()
+    reordered = prefer(found, ["Availability and stock"])
+    assert len(reordered) == len(found)
+    assert set(kinds(reordered)) == set(kinds(found))
+    wanted = set(KIND_GROUPS["Availability and stock"])
+    assert reordered[0].kind in wanted
+
+
+def test_choosing_everything_changes_nothing():
+    """The default page is the one the score alone produces. The control has
+    to be used before it does anything."""
+    found = four_captures()
+    assert prefer(found, list(KIND_GROUPS)) == found
+
+
+def test_choosing_nothing_changes_nothing():
+    found = four_captures()
+    assert prefer(found, []) == found
+
+
+def test_score_still_breaks_ties_inside_a_group():
+    """Preference decides which block comes first, not the order within it."""
+    found = four_captures()
+    led = prefer(found, ["Availability and stock"])
+    wanted = set(KIND_GROUPS["Availability and stock"])
+    front = [i for i in led if i.kind in wanted]
+    assert [i.significance for i in front] == sorted(
+        (i.significance for i in front), reverse=True)
+
+
+def test_an_unknown_group_name_is_ignored_rather_than_obeyed():
+    found = four_captures()
+    assert prefer(found, ["Nonsense"]) == found
