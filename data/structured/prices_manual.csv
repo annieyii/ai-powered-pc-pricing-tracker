@@ -1,13 +1,21 @@
-sku,captured_at_local,price,regular_price,savings,availability,seller,stock_hint,note
-6672159,2026-09-12T15:07,1299.99,,,Add to cart,Best Buy,Act fast - Only 1 left at your store!,Pickup ready today; shipping unavailable; badge Gaming PC; 4.7 (95)
-6668002,2026-09-12T15:07,1299.99,,,Add to cart,Best Buy,,Pickup ready today; shipping unavailable; badge Premium performance PC; 4.1 (196)
-6667986,2026-09-12T15:07,1349.99,,,Add to cart,Best Buy,Act fast - Only 2 left at nearby store!,Pickup ready Fri Sep 18; shipping unavailable; 4.8 (5)
-6679150,2026-09-12T15:07,999.99,1299.99,300.00,Add to cart,Best Buy,Act fast - Only 1 left at your store!,DEAL ENDS SEP 14 2026 (stated on page); pickup ready today; 5.0 (6)
-6672159,2026-09-12T21:00,1299.99,,,Add to cart,Best Buy,Act fast - Only 1 left at your store!,Pickup ready today; shipping unavailable to 96939
-6668002,2026-09-12T21:00,1299.99,,,Add to cart,Best Buy,,Pickup ready today; shipping unavailable to 96939
-6667986,2026-09-12T21:00,1349.99,,,Add to cart,Best Buy,Act fast - Only 2 left at nearby store!,Pickup ready Fri Sep 18 at Union Square; shipping unavailable to 96939
-6679150,2026-09-12T21:00,999.99,1299.99,300.00,Add to cart,Best Buy,Act fast - Only 1 left at your store!,DEAL ENDS SEP 14 2026 (stated on page); pickup ready today; shipping unavailable to 96939
-6672159,2026-09-13T12:30,1299.99,,,Add to cart,Best Buy,Act fast - Only 1 left at your store!,Pickup ready today at Union Square; shipping unavailable to 96939; page badge now Best Selling in Windows Laptops (was Gaming PC)
-6668002,2026-09-13T12:30,1299.99,,,Add to cart,Best Buy,,Pickup ready today at Union Square; shipping unavailable to 96939; no stock note shown
-6667986,2026-09-13T12:30,1349.99,,,Add to cart,Best Buy,Act fast - Only 2 left at nearby store!,Pickup at Union Square moved earlier from Fri Sep 18 to Thu Sep 17; shipping unavailable to 96939
-6679150,2026-09-13T12:30,999.99,1299.99,300.00,Add to cart,Best Buy,Act fast - Only 1 left at nearby store!,DEAL ENDS TOMORROW as stated on page (was Deal ends Sep 14 2026); pickup at Union Square slipped from today to Thu Sep 17; shipping unavailable to 96939
+sku,captured_at_local,price,regular_price,savings,availability,seller,stock_hint,pickup_eta,note
+6672159,2026-09-12T15:07,1299.99,,,Add to cart,Best Buy,Act fast - Only 1 left at your store!,today,Pickup ready today; shipping unavailable; badge Gaming PC; 4.7 (95)
+6668002,2026-09-12T15:07,1299.99,,,Add to cart,Best Buy,,today,Pickup ready today; shipping unavailable; badge Premium performance PC; 4.1 (196)
+6667986,2026-09-12T15:07,1349.99,,,Add to cart,Best Buy,Act fast - Only 2 left at nearby store!,2026-09-18,Pickup ready Fri Sep 18; shipping unavailable; 4.8 (5)
+6679150,2026-09-12T15:07,999.99,1299.99,300.00,Add to cart,Best Buy,Act fast - Only 1 left at your store!,today,DEAL ENDS SEP 14 2026 (stated on page); pickup ready today; 5.0 (6)
+6672159,2026-09-12T21:00,1299.99,,,Add to cart,Best Buy,Act fast - Only 1 left at your store!,today,Pickup ready today; shipping unavailable to 96939
+6668002,2026-09-12T21:00,1299.99,,,Add to cart,Best Buy,,today,Pickup ready today; shipping unavailable to 96939
+6667986,2026-09-12T21:00,1349.99,,,Add to cart,Best Buy,Act fast - Only 2 left at nearby store!,2026-09-18,Pickup ready Fri Sep 18 at Union Square; shipping unavailable to 96939
+6679150,2026-09-12T21:00,999.99,1299.99,300.00,Add to cart,Best Buy,Act fast - Only 1 left at your store!,today,DEAL ENDS SEP 14 2026 (stated on page); pickup ready today; shipping unavailable to 96939
+6672159,2026-09-13T12:30,1299.99,,,Add to cart,Best Buy,Act fast - Only 1 left at your store!,today,Pickup ready today at Union Square; shipping unavailable to 96939; page badge now Best Selling in Windows Laptops (was Gaming PC)
+6668002,2026-09-13T12:30,1299.99,,,Add to cart,Best Buy,,today,Pickup ready today at Union Square; shipping unavailable to 96939; no stock note shown
+6667986,2026-09-13T12:30,1349.99,,,Add to cart,Best Buy,Act fast - Only 2 left at nearby store!,2026-09-17,Pickup at Union Square moved earlier from Fri Sep 18 to Thu Sep 17; shipping unavailable to 96939
+6679150,2026-09-13T12:30,999.99,1299.99,300.00,Add to cart,Best Buy,Act fast - Only 1 left at nearby store!,2026-09-17,DEAL ENDS TOMORROW as stated on page (was Deal ends Sep 14 2026); pickup at Union Square slipped from today to Thu Sep 17; shipping unavailable to 96939
+6672159,2026-09-13T14:30,1299.99,,,Add to cart,Best Buy,Act fast - Only 1 left at your store!,today,Pickup ready today at Union Square; shipping unavailable to 96939; first capture after the Sunday 00:01 CT weekly-ad changeover
+6668002,2026-09-13T14:30,1299.99,,,Add to cart,Best Buy,,today,Pickup ready today at Union Square; shipping unavailable to 96939; no stock note shown; first capture after the weekly-ad changeover
+6667986,2026-09-13T14:30,1349.99,,,Add to cart,Best Buy,Act fast - Only 2 left at nearby store!,2026-09-18,Pickup at Union Square slipped again from Thu Sep 17 to Fri Sep 18; shipping unavailable to 96939
+6679150,2026-09-13T14:30,999.99,1299.99,300.00,Add to cart,Best Buy,Act fast - Only 1 left at nearby store!,2026-09-18,Promotion badge now a live countdown reading 22:27:58 rather than a date; pickup at Union Square slipped again from Thu Sep 17 to Fri Sep 18; shipping unavailable to 96939
+6672159,2026-09-13T21:00,1299.99,,,Add to cart,Best Buy,Act fast - Only 1 left at your store!,today,Read 21:13; page badge back to Gaming PC (was Best Selling at 12:30 and 14:30); shipping unavailable to 96939
+6668002,2026-09-13T21:00,1299.99,,,Add to cart,Best Buy,,today,Read 21:12; no stock note shown; shipping unavailable to 96939
+6667986,2026-09-13T21:00,1349.99,,,Add to cart,Best Buy,Act fast - Only 2 left at nearby store!,2026-09-18,Read 21:11; shipping unavailable to 96939
+6679150,2026-09-13T21:00,999.99,1299.99,300.00,Add to cart,Best Buy,Act fast - Only 1 left at nearby store!,2026-09-18,Read 21:11; promotion countdown reading 15:48:24 which agrees with expiry at 2026-09-14 12:59 Asia/Taipei; shipping unavailable to 96939

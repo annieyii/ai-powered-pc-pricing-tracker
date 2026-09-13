@@ -120,8 +120,10 @@ Adding an observation is a five-minute loop and needs no code change.
 
 1. Open each product URL from `data/structured/products.csv`, with the store still
    set to Union Square, NYC.
-2. Record six fields per SKU: `price`, `regular_price`, `savings`, `availability`,
-   `seller`, `stock_hint`. `price` means the clearly labelled purchase price for that
+2. Record seven fields per SKU: `price`, `regular_price`, `savings`, `availability`,
+   `seller`, `stock_hint`, `pickup_eta`. `pickup_eta` is `today` or a date such as
+   `2026-09-18`; `today` is a state, not the capture date, so same-day pickup on two
+   different days does not read as a change. `price` means the clearly labelled purchase price for that
    SKU, that seller and that fulfilment state. It is not the largest number on the
    page, not a monthly financing figure, not a comparison value, and not an open-box
    range. If a field is not shown, leave it blank. Never guess.
