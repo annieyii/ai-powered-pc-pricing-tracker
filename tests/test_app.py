@@ -6,6 +6,9 @@ observation summary with no endpoint configured and no network available.
 """
 from pathlib import Path
 
+import json
+
+import pandas as pd
 import pytest
 from streamlit.testing.v1 import AppTest
 
@@ -14,6 +17,13 @@ import tracker.summarise as summarise
 APP = str(Path(__file__).resolve().parents[1] / "tracker" / "app.py")
 
 LLM_ENV = ("LLM_BASE_URL", "LLM_MODEL", "LLM_API_KEY")
+
+PRICES_CSV = Path(__file__).resolve().parents[1] / "data" / "structured" / "prices_manual.csv"
+
+
+def newest_capture() -> str:
+    """The latest capture time on record, in the CSV's own format."""
+    return max(pd.read_csv(PRICES_CSV)["captured_at_local"])
 
 
 def run_app():
@@ -38,9 +48,15 @@ def without_stored_summary(monkeypatch, tmp_path):
 
 @pytest.fixture
 def stored_summary(monkeypatch, tmp_path):
-    """A stored summary whose header names the newest capture in the CSV."""
-    def write(last_capture="2026-09-12T15:07",
+    """A stored summary whose header names the newest capture in the CSV.
+
+    The newest capture is read from the CSV rather than written down here. A
+    literal would be correct only until the next capture, and would then fail
+    as staleness while the staleness check was working perfectly.
+    """
+    def write(last_capture=None,
               prose="Stored prose written by the model."):
+        last_capture = last_capture or newest_capture()
         path = tmp_path / "summary.md"
         path.write_text(f"<!-- model=some-model generated=2026-09-12T16:00 "
                         f"last_capture={last_capture} -->\n\n{prose}\n")
@@ -76,16 +92,49 @@ def test_findings_are_listed_and_their_ranking_is_inspectable(page):
 
 
 def test_the_selection_controls_are_in_the_sidebar(page):
-    """Every section reads the same scope, so the control that sets it lives
-    once, outside the flow of the sections it governs."""
-    assert len(page.sidebar.multiselect) == 1
+    """Every section reads the same scope, so the controls that set it live
+    once, outside the flow of the sections they govern."""
+    assert page.sidebar.multiselect(key="products") is not None
     assert len(page.sidebar.date_input) == 1
 
 
-def test_narrowing_the_selection_narrows_the_whole_page(page):
+def test_a_filter_appears_only_for_a_column_the_products_disagree_about(page):
+    """The attribute filters are generated from the master, so the sidebar
+    grows controls as the catalogue grows rather than as someone edits it. A
+    column every product shares is not a choice and raises nothing."""
+    keys = {widget.key for widget in page.sidebar.multiselect}
+    assert "filter_brand" in keys and "filter_cpu" in keys
+    # All four products are 16GB, 512GB, 14 inch and Windows 11 Home.
+    assert {"filter_ram_gb", "filter_storage_gb", "filter_screen_inch",
+            "filter_operating_system"}.isdisjoint(keys)
+
+
+def test_an_attribute_filter_narrows_the_page_like_a_product_filter():
+    """Brand and processor are only another way of naming SKUs, so they reach
+    the same scope and every section below moves with them."""
+    app = run_app()
+    narrowed = app.sidebar.multiselect(key="filter_brand").set_value(["Lenovo"]).run()
+    assert not narrowed.exception
+    assert any("A selection is active" in info.value for info in narrowed.info)
+
+
+def test_the_untouched_page_reports_no_selection(page):
+    """The date input opens on the full range, which is not a filter. Counting
+    it as one made the first screen announce a selection the reader never
+    made."""
+    assert not any("A selection is active" in info.value for info in page.info)
+
+
+def test_narrowing_the_selection_narrows_the_whole_page():
     """A chart drawn for one selection beside a summary written for another
-    is separately true in both halves and wrong as a page."""
-    narrowed = page.sidebar.multiselect[0].set_value(["6672159"]).run()
+    is separately true in both halves and wrong as a page.
+
+    This case runs its own app: setting a widget value mutates the instance it
+    is set on, so narrowing the shared one would hand every later case a page
+    that is still filtered.
+    """
+    narrowed = run_app().sidebar.multiselect(key="products").set_value(
+        ["6672159"]).run()
     assert not narrowed.exception
     assert any("A selection is active" in info.value for info in narrowed.info)
 
@@ -94,6 +143,32 @@ def test_the_trend_chart_is_the_first_section(page):
     """Deliverable B asks for a chart of price movement over time, so the
     time series comes before any cross-sectional comparison."""
     assert len(page.get("plotly_chart")) == 1
+
+
+def test_no_block_leaves_a_pair_of_dollar_signs_unescaped(page):
+    """Streamlit reads `$...$` as LaTeX, so a line carrying two prices renders
+    as a maths span with both currency symbols eaten. Every figure here is a
+    price, so this is the default failure rather than an unlikely one, and the
+    element values the other cases read look correct while the page does not.
+    """
+    offenders = [element.value
+                 for kind in ("markdown", "caption", "success", "info", "warning")
+                 for element in getattr(page, kind)
+                 if element.value.replace(r"\$", "").count("$") >= 2]
+    assert offenders == []
+
+
+def test_the_chart_draws_one_trace_per_strict_product(page):
+    """A matched pair at parity overlaps exactly, so the second line can be
+    hidden under the first and the chart reads as a single product. The traces
+    are counted rather than trusted to be visible."""
+    traces = json.loads(page.get("plotly_chart")[0].proto.spec)["data"]
+    assert len(traces) == 2
+    assert {trace["name"] for trace in traces} == {
+        "Lenovo Yoga 7a 2-in-1 14in", "HP OmniBook X Flip 2-in-1 14in"}
+    # The one drawn second must let the first show through, or counting is moot.
+    assert traces[1]["line"]["dash"] != "solid"
+    assert traces[1]["marker"]["symbol"].endswith("-open")
 
 
 def test_every_product_stays_in_the_table(page):

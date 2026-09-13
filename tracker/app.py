@@ -28,6 +28,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from tracker.insights import (
+    CHANGE_KINDS,
     Scope,
     detect,
     select_by_score,
@@ -56,9 +57,68 @@ PRODUCTS_CSV = ROOT / "data" / "structured" / "products.csv"
 PRICES_CSV = ROOT / "data" / "structured" / "prices_manual.csv"
 
 # Two identical series must stay separable without moving either line off its
-# real value, so they differ by dash pattern and marker instead.
+# real value. A matched pair at parity overlaps exactly, which is the normal
+# case here rather than the edge case, so the trace drawn second is dashed,
+# hollow and smaller: the one underneath shows through the gaps and through the
+# marker centres instead of disappearing beneath it. Colours are set explicitly
+# because the inherited second colour was too pale to find on a white ground.
+def usd(text: str) -> str:
+    """Escape dollar signs so Streamlit does not read a price pair as LaTeX.
+
+    Two unescaped `$` in one markdown block make everything between them a
+    maths span: `$999.99 ... $1,299.99` renders as green italics with the
+    currency symbols eaten. Every figure on this page is a price, so escaping
+    is the default rather than the exception.
+    """
+    return text.replace("$", r"\$")
+
+
+# Attribute filters are only another way of choosing SKUs, so they feed the
+# same `Scope(skus=...)` that the product picker does and nothing downstream
+# changes. A column whose values are all the same is not a choice, so it grows
+# a control only once the catalogue disagrees about it.
+#
+# The set of filters is read off the product master rather than listed here.
+# A column added to products.csv, whether by hand or by an API that returns
+# more attributes than this one does, becomes a filter on the next reload with
+# no edit to this file. That is the whole extension story for the sidebar.
+
+#: Columns that identify a product rather than describe it. Filtering by these
+#: would duplicate the product picker or offer one option per row.
+NOT_FILTERABLE = frozenset({"sku", "model_name", "model_number", "source_url"})
+
+#: The order a reader reaches for, for the columns this project already knows.
+#: Anything not named here still appears, after these, in the master's own
+#: column order. Nothing is hidden for being unrecognised.
+FILTER_ORDER = ["role", "brand", "cpu", "form_factor"]
+
+#: Labels worth spelling properly. Any other column is title-cased from its
+#: own name, so a new column is readable before anyone writes it down here.
+FILTER_LABELS = {
+    "cpu": "Processor", "ram_gb": "Memory (GB)", "storage_gb": "Storage (GB)",
+    "screen_inch": "Screen (in)", "brightness_nits": "Brightness (nits)",
+    "display_type": "Display", "screen_resolution": "Resolution",
+    "list_price": "List price", "operating_system": "Operating system",
+    "device_type": "Device type", "form_factor": "Form factor",
+    "touch_screen": "Touch screen",
+}
+
+
+def filterable_columns(products: pd.DataFrame) -> list[str]:
+    """Every descriptive column, the four that lead first."""
+    rest = [c for c in products.columns
+            if c not in NOT_FILTERABLE and c not in FILTER_ORDER]
+    return [c for c in FILTER_ORDER if c in products.columns] + rest
+
+
+def filter_label(column: str) -> str:
+    return FILTER_LABELS.get(column, column.replace("_", " ").capitalize())
+
+
+COLOURS = ["#1f4e9c", "#d1495b", "#2a9d8f", "#6c757d"]
 DASHES = ["solid", "dash", "dot", "dashdot"]
-MARKERS = ["circle", "square", "diamond", "x"]
+MARKERS = ["circle", "circle-open", "diamond-open", "x"]
+SIZES = [13, 9, 9, 9]
 
 st.set_page_config(page_title="PC Pricing Tracker", layout="wide")
 st.title("PC Pricing Tracker — Best Buy")
@@ -92,18 +152,69 @@ if data.prices.empty:
 names = dict(zip(data.products["sku"],
                  data.products["brand"] + " " + data.products["model_name"]))
 
+eligible = data.products
+
+
+def attribute_filter(column: str, label: str) -> None:
+    """One control for one column, or none at all.
+
+    Options come from the whole master rather than from what the other filters
+    have already left. Cascading looks tidier and is worse: narrowing one
+    control would drop values another control is still holding.
+    """
+    global eligible
+    if column not in data.products.columns:
+        return
+    values = sorted(data.products[column].dropna().unique().tolist())
+    if len(values) < 2:
+        return
+    kept = st.multiselect(label, options=values, default=values,
+                          key=f"filter_{column}")
+    eligible = eligible[eligible[column].isin(kept)]
+
+
 with st.sidebar:
     st.header("Selection")
-    every_sku = list(data.products["sku"])
-    picked = st.multiselect("Products", options=every_sku, default=every_sku,
-                            format_func=lambda sku: names.get(sku, sku))
+
+    # The window comes first: this is a tracker, so when is the outer question
+    # and everything else narrows inside it.
     earliest = data.prices["captured_at"].min().date()
     latest = data.prices["captured_at"].max().date()
     window = st.date_input("Capture dates", value=(earliest, latest),
                            min_value=earliest, max_value=latest)
 
+    every_sku = list(data.products["sku"])
+    # Both HP SKUs carry the same brand and model name, so the CPU is what
+    # makes the option readable. The prose below keeps the shorter name.
+    cpus = dict(zip(data.products["sku"], data.products["cpu"]))
+    picked = st.multiselect(
+        "Products", options=every_sku, default=every_sku, key="products",
+        format_func=lambda sku: f"{names.get(sku, sku)} · {cpus.get(sku, '')}")
+
+    columns = filterable_columns(data.products)
+    lead, rest = columns[:len(FILTER_ORDER)], columns[len(FILTER_ORDER):]
+
+    for column in lead:
+        attribute_filter(column, filter_label(column))
+
+    with st.expander("More attributes"):
+        if not any(data.products[c].dropna().nunique() > 1 for c in rest):
+            st.caption("Every product on record shares these, so there is "
+                       "nothing here to choose between yet.")
+        for column in rest:
+            attribute_filter(column, filter_label(column))
+
+    # Both kinds of control narrow, so they intersect. Choosing a brand and
+    # then a product from another brand selects nothing, and the page says so
+    # rather than quietly preferring one of the two.
+    picked = [sku for sku in picked if sku in set(eligible["sku"])]
+
 start = end = None
-if isinstance(window, (list, tuple)) and len(window) == 2:
+# The full range is not a filter. Normalising it to None is what `skus` already
+# does below, and without it the untouched page reports a selection it has not
+# made: every key would carry a date and never compare equal to Scope().
+if (isinstance(window, (list, tuple)) and len(window) == 2
+        and tuple(window) != (earliest, latest)):
     start = datetime.combine(window[0], time.min)
     end = datetime.combine(window[1], time.max)
 
@@ -136,6 +247,39 @@ st.caption(f"Last observation {scoped['captured_at'].max():%Y-%m-%d %H:%M} · "
            f"{len(scoped)} snapshots · "
            f"{points} capture time(s) covering the strict group")
 
+found = detect(scoped, data.products)
+
+# ------------------------------------------------------- headline result
+# The question the page exists to answer, above the evidence for it. A reader
+# who stops after one screen should still leave with the answer rather than
+# with a chart they have to interpret first.
+comparison = strict_comparison(scoped, data.products)
+names = dict(zip(data.products["sku"],
+                 data.products["brand"] + " " + data.products["model_name"]))
+
+if comparison["comparable"]:
+    columns = st.columns(len(comparison["rows"]) + 2)
+    for column, row in zip(columns, comparison["rows"]):
+        column.metric(names.get(row["sku"], row["sku"]), f"${row['price']:,.2f}")
+    columns[-2].metric("Price difference", f"${comparison['delta']:,.2f}")
+    columns[-1].metric("Capture times", points)
+    if comparison["parity"]:
+        st.success(usd(
+            f"**The matched pair is at price parity.** Both SKUs were listed "
+            f"at ${comparison['rows'][0]['price']:,.2f} at "
+            f"{comparison['captured_at']:%Y-%m-%d %H:%M}, and they match on "
+            f"every field the equivalence rule uses."))
+    else:
+        st.success(usd(
+            f"**{names[comparison['cheaper_sku']]} is "
+            f"${comparison['delta']:,.2f} below "
+            f"{names[comparison['dearer_sku']]}** at "
+            f"{comparison['captured_at']:%Y-%m-%d %H:%M}."))
+else:
+    st.warning(f"No matched-pair comparison yet: {comparison['reason']}.")
+
+st.divider()
+
 # --------------------------------------------------------------- 1. trend
 st.header("1. Price over time — strict equivalence group")
 
@@ -148,8 +292,12 @@ for index, product in enumerate(strict.itertuples()):
     name = f"{product.brand} {product.model_name}"
     figure.add_trace(go.Scatter(
         x=line["captured_at"], y=line["price"], mode="lines+markers", name=name,
-        line=dict(dash=DASHES[index % len(DASHES)], width=2),
-        marker=dict(symbol=MARKERS[index % len(MARKERS)], size=11),
+        line=dict(dash=DASHES[index % len(DASHES)], width=2,
+                  color=COLOURS[index % len(COLOURS)]),
+        marker=dict(symbol=MARKERS[index % len(MARKERS)],
+                    size=SIZES[index % len(SIZES)],
+                    color=COLOURS[index % len(COLOURS)],
+                    line=dict(width=2, color=COLOURS[index % len(COLOURS)])),
         hovertemplate="%{x|%b %d %H:%M}<br>$%{y:.2f}<extra>" + name + "</extra>",
     ))
 figure.update_layout(yaxis_title="Price (USD)",
@@ -158,21 +306,40 @@ figure.update_layout(yaxis_title="Price (USD)",
                      legend=dict(orientation="h", y=-0.25))
 st.plotly_chart(figure, width="stretch")
 
+# A reader who sees one line where the legend names two will not assume parity;
+# they will assume the chart is broken. So the coincidence is stated.
+priced = strict.merge(scoped, on="sku")
+per_moment = priced.groupby("captured_at")["price"].agg(["nunique", "count"])
+together = per_moment[per_moment["count"] == len(strict)]
+if not together.empty and (together["nunique"] == 1).all():
+    st.caption("Both series are drawn. They coincide at every capture time "
+               "because the two SKUs were listed at the same price, so one "
+               "line sits exactly on the other.")
+
 if points < 2:
     st.info(f"Only {points} capture time recorded so far. A trend needs at "
             "least two.")
 else:
     moved = strict.merge(scoped, on="sku").groupby("sku")["price"].nunique()
     if (moved <= 1).all():
-        st.info(f"No price change observed across {points} capture times.")
+        # "No price change" reads as "nothing happened", and in this window that
+        # is false: the prices held while stock and availability moved. A chart
+        # of prices cannot show that, so it says where it is shown instead.
+        movements = [i for i in found if i.kind in CHANGE_KINDS]
+        if movements:
+            st.info(
+                f"No strict price changed across {points} capture times. "
+                f"{len(movements)} other movement"
+                f"{'' if len(movements) == 1 else 's'} were observed in the "
+                f"same window and are listed in section 2.")
+        else:
+            st.info(f"No price change observed across {points} capture times.")
 
 # ------------------------------------------------------------- 2. findings
 st.header("2. What the observations say")
 st.caption("Findings are detected and scored deterministically. The model, when "
            "one is configured, chooses which of them to lead with. It never "
            "produces a figure, because it never computes one.")
-
-found = detect(scoped, data.products)
 
 if not found:
     st.info("No findings for the current selection.")
@@ -191,19 +358,20 @@ else:
 
     ranking = st.session_state.get("ranking") or select_by_score(found, 3)
     if ranking.framing:
-        st.markdown(f"**{ranking.framing}**")
+        st.markdown(usd(f"**{ranking.framing}**"))
     for item in ranking.insights:
-        st.markdown(f"- {item.sentence}")
+        st.markdown(usd(f"- {item.sentence}"))
     st.caption("Selected by the language model from the scored candidates."
                if ranking.source == "model"
                else "Selected by score. No model was involved.")
 
     with st.expander(f"All {len(found)} findings, and how each was ranked"):
-        st.caption("significance = magnitude x recency x scope x rarity. The "
-                   "factors are shown so the order can be argued with rather "
-                   "than trusted.")
+        st.caption("priority = magnitude x recency x scope x rarity. It orders "
+                   "the findings and means nothing else; it is not statistical "
+                   "significance. The factors are shown so the order can be "
+                   "argued with rather than trusted.")
         st.dataframe(pd.DataFrame([{
-            "significance": round(item.significance, 3),
+            "priority": round(item.significance, 3),
             "magnitude": round(item.facts.get("magnitude", 0.0), 2),
             "recency": round(item.facts.get("recency", 0.0), 2),
             "scope": round(item.facts.get("scope_weight", 0.0), 2),
@@ -246,7 +414,7 @@ if run and run[2] == "model" and st.button("Save as the stored summary"):
 
 with summary_area:
     if run and run[2] == "model":
-        st.markdown(run[0])
+        st.markdown(usd(run[0]))
         st.caption("Written by the language model in this session. Every figure "
                    "in it was checked against the computed values before it was "
                    "displayed. Not stored yet.")
@@ -256,11 +424,11 @@ with summary_area:
             f"in the computed values: {', '.join(run[1])}. A summary is never "
             f"shown with a figure that was not verified, so the computed "
             f"summary is below instead.")
-        st.markdown(template_summary(context))
+        st.markdown(usd(template_summary(context)))
         st.caption("Computed directly from the recorded observations. No model "
                    "output is used here.")
     elif stored is not None:
-        st.markdown(stored.prose)
+        st.markdown(usd(stored.prose))
         st.caption(f"Written by `{stored.model}` on {stored.generated_at} and "
                    f"stored in `data/summary.md`. Every figure in it was checked "
                    f"against the computed values before it was stored.")
@@ -272,7 +440,7 @@ with summary_area:
                 f"observation and may no longer describe what the chart above "
                 f"shows.")
     else:
-        st.markdown(template_summary(context))
+        st.markdown(usd(template_summary(context)))
         st.caption("Computed directly from the recorded observations by string "
                    "formatting. No language model was called, and none is "
                    "needed to render this page.")
@@ -292,14 +460,11 @@ st.dataframe(
 # ----------------------------------------------------------- 4. comparison
 st.header("5. Strict group — matched-pair observation")
 
-comparison = strict_comparison(scoped, data.products)
-names = dict(zip(data.products["sku"],
-                 data.products["brand"] + " " + data.products["model_name"]))
-
 if not comparison["comparable"]:
     st.info(f"Not comparable: {comparison['reason']}.")
 elif comparison["parity"]:
-    st.metric("Price difference", "$0.00")
+    # The figure is in the headline row. What is left here is the part that
+    # needs the space: which fields the rule used, and which it did not.
     st.write(
         f"**Price parity at {comparison['captured_at']:%Y-%m-%d %H:%M}.** "
         "Both SKUs match on every field the equivalence rule uses — processor "
@@ -307,14 +472,13 @@ elif comparison["parity"]:
         "and form factor — and were listed at the same price. They still "
         "differ outside that key: panel brightness is 400 nits against 300.")
 else:
-    st.metric("Price difference", f"${comparison['delta']:.2f}")
-    st.write(
+    st.write(usd(
         f"At {comparison['captured_at']:%Y-%m-%d %H:%M}, "
         f"**{names[comparison['cheaper_sku']]} is "
         f"${comparison['delta']:.2f} below "
         f"{names[comparison['dearer_sku']]}**. This is a matched-pair "
         "observation at one moment; the difference is not attributed to any "
-        "single attribute.")
+        "single attribute."))
 
 # ------------------------------------------------------------ 5. reference
 st.header("6. Reference products")
@@ -329,11 +493,12 @@ for product in reference.itertuples():
     if not pd.isna(product.savings) and product.savings:
         note = (f" — discounted ${product.savings:,.2f} from "
                 f"${product.regular_price:,.2f}")
-    st.write(f"- **{product.brand} {product.model_name}** — {price}{note} · "
-             f"{product.cpu} · {product.form_factor} · {product.display_type} "
-             f"· {product.availability}")
+    st.write(usd(f"- **{product.brand} {product.model_name}** — {price}{note} · "
+                 f"{product.cpu} · {product.form_factor} · "
+                 f"{product.display_type} · {product.availability}"))
 
 st.divider()
-st.caption("Every product here is listed at $1,299.99 except the Intel "
-           "variant at $1,349.99. Where a current price sits below list, that "
-           "is promotional state.")
+st.caption(usd(
+    "Every product here is listed at $1,299.99 except the Intel variant at "
+    "$1,349.99. Where a current price sits below list, that is promotional "
+    "state."))
