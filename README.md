@@ -9,7 +9,8 @@ Best Buy, and compares the two that match on a stated equivalence rule. The ques
 it is built to answer is narrow on purpose: where does a Lenovo SKU sit against a
 like-for-like competitor SKU, and is that position moving.
 
-Running the app gives you a Streamlit page with five sections, in this order:
+Running the app gives you a Streamlit page with a headline result and six numbered
+sections, in this order:
 
 1. **Price over time** for the strict equivalence group. This is the trend chart.
 2. **Observation summary**, a short written read of what the figures show. Every
@@ -23,8 +24,10 @@ Running the app gives you a Streamlit page with five sections, in this order:
 Prices are recorded by hand. Each observation is appended to
 `data/structured/prices_manual.csv`, which is the system of record. On every page
 load the app rebuilds an in-memory SQLite database from the two CSVs, and that
-database is what refuses bad rows. Nothing in the running app calls a language model,
-so it starts with no API key and no model available.
+database is what refuses bad rows. Nothing is called on page load, so the app starts
+with no API key and no model available. Two buttons do call a model when a reader
+presses them; both are disabled when no endpoint is configured, and both sections
+fall back to deterministic output.
 
 ## Compared products and how they were chosen
 
@@ -37,7 +40,9 @@ looking at all the candidates can always be bent until the candidates fit.
 
 **Equivalence fields.** Two SKUs are `strict` only if all of these match exactly:
 processor model, memory, storage, screen size, operating system, device type, form
-factor. These are the grouping fields named in the assessment brief.
+factor. The brief names six of these. Screen size is added here, because a rule that
+lets a 14-inch and a 16-inch machine into the same group is comparing chassis sizes
+as well as prices. The extra field only narrows the group; it never widens it.
 
 | Role | Product | SKU | CPU | Form factor | List price |
 |---|---|---|---|---|---|
@@ -84,9 +89,19 @@ uv sync
 uv run streamlit run tracker/app.py
 ```
 
-That is the whole setup. There is no database file to create, no environment variable
-to set, and no API key. The SQLite store is built in memory from the CSVs when the
-page loads.
+That is the whole setup for reviewing the tracker. There is no database file to
+create, no environment variable to set, and no API key: the SQLite store is built in
+memory from the CSVs when the page loads, and every section renders deterministically.
+
+The page carries two optional model buttons. Without an endpoint they are disabled and
+say which variable is missing, which is the expected state rather than a failure. To
+enable them, put the three values in `.env` and export them before starting the app,
+because nothing in this project reads `.env` for you:
+
+```bash
+set -a; source .env; set +a      # or export the three variables yourself
+uv run streamlit run tracker/app.py
+```
 
 Tests:
 
@@ -94,10 +109,10 @@ Tests:
 uv run pytest
 ```
 
-**99 tests pass** at the time of writing: store behaviour including every refusal
+**253 tests pass** at the time of writing: store behaviour including every refusal
 path, the pure metric functions, the extraction gates against a stubbed client, and
-five end-to-end checks that drive the real Streamlit page against the real data files.
-No test reaches the network.
+seventeen end-to-end checks that drive the real Streamlit page against the real data
+files. No test reaches the network.
 
 ## Updating the data
 
@@ -112,8 +127,9 @@ Adding an observation is a five-minute loop and needs no code change.
    range. If a field is not shown, leave it blank. Never guess.
 3. Append one row per SKU to `data/structured/prices_manual.csv`, with
    `captured_at_local` in `YYYY-MM-DDTHH:MM` Asia/Taipei time.
-4. Reload the Streamlit page. There is no caching in the app, deliberately, so a
-   reload reflects the file as it now stands.
+4. Reload the Streamlit page. The CSV loader is deliberately not wrapped in
+   `st.cache_data`, so a reload reflects the file as it now stands. Results a reader
+   asked a model for are held in session state until the selection changes.
 
 If a row is malformed or violates one of the rules below, it appears at the top of
 the page in an expanded panel with its **line number in the CSV and the database's
@@ -239,26 +255,57 @@ because the validation pattern it demonstrates, scoring model output field by fi
 against a human-verified master, is the part that transfers to the analysis layer
 above.
 
-Run it by hand, never from the app:
+Run it by hand, never from the app. Nothing loads `.env` for you, so the three
+variables have to reach the process; `set -a` exports everything the file sets:
 
 ```bash
+set -a; source .env; set +a      # or export the three variables yourself
 uv run python -m tracker.extract
 ```
 
 It reads `data/raw_specs/<sku>.txt`, one verbatim copy of each product page's title
 and Specifications block, and writes `data/extraction_review.csv`.
 
-> **[Placeholder]** The raw specification files have not been captured yet, so
-> `data/extraction_review.csv` has not been generated, and no endpoint has been
-> configured yet, so `data/summary.md` has not been generated either. The figures for
-> N, X and Y above are to be filled in from the review file once the run is made. The
-> dashboard currently renders the deterministic summary, which is the intended
-> behaviour with no endpoint present.
+**What the run produced.** The same file was extracted twice, against two endpoints,
+changing only the three variables in `.env`:
+
+| Endpoint | Model | Matched the verified value | Ungrounded values |
+|---|---|---|---|
+| `https://api.openai.com/v1` | `gpt-4o-mini` | 39 of 48 | 0 |
+| `http://localhost:11434/v1` | `qwen2.5:7b` (Ollama) | 41 of 48 | 0 |
+
+`data/extraction_review.csv` holds the first, `data/extraction_review.qwen2.5-7b.csv`
+the second. Neither run produced a number that was absent from the page it was given.
+
+Read the misses before the totals, because they are not one kind of thing. Ten of the
+twelve fields were 4 of 4 on both runs. Every miss is `model_name` or `cpu`:
+
+- `model_name`, 0 of 4 on both. The prompt says to copy from the page; the master
+  holds a shortened name that appears nowhere on the page. The two can never agree,
+  so this measures a scoring convention, not an extraction failure.
+- `cpu`, 1 of 4 and 0 of 4. The page splits the value: `Processor Model` is a family
+  label, `Processor Model Number` carries the model. Only the Dell page states the
+  whole value in one field, and that is the one `qwen2.5:7b` got right.
+- One real error: `gpt-4o-mini` called the Dell a 2-in-1. That page has no
+  `2-in-1 Design` row at all, and its title does not say 2-in-1, so the value was
+  inferred. **No validator caught it**, because `2-in-1` is grounded nowhere but is a
+  member of the allowed enum. The human-verified master caught it, and nothing else
+  would have.
+
+The 39 against 41 is therefore not a ranking of the two models. It is sensitive to a
+rubric that the prompt does not encode. The prompt was left as written rather than
+tuned after seeing the scores: with one labelled set, a prompt changed to raise the
+score stops measuring anything.
 
 ### What no model does here
 
-- It never reads or produces a price. Price parsing and ingest are deterministic.
-- It never decides equivalence. Grouping is a rule applied to structured fields.
+- It never parses a price. Every figure is read off the page by a person and into the
+  CSV, and every computation over those figures is deterministic. The summary model is
+  handed prices that were already computed, and `data/summary.md` repeats them, so it
+  does restate a price; what it cannot do is arrive at one.
+- It never decides equivalence. `role` is assigned by hand after checking the seven
+  fields, and the code then applies that label. The check is a person's, not a rule
+  the program enforces.
 - It never writes to the system of record. Both CSVs stay human-edited.
 - Nothing calls an endpoint on page load. A reviewer can run the whole app with no
   API key and no model available.
