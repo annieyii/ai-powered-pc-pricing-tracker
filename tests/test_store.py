@@ -9,11 +9,13 @@ import pytest
 
 from tracker.store import (
     Dataset,
+    PRODUCT_FIELDS,
     build,
     connect,
     ingest_prices,
     ingest_products,
     init_db,
+    extra_product_columns,
     read_prices,
     read_products,
 )
@@ -186,3 +188,50 @@ def test_build_reports_accepted_and_total(tmp_path):
 def test_build_on_a_header_only_file(tmp_path):
     data = build(PRODUCTS_CSV, csv_at(tmp_path, ""))
     assert data.prices.empty and data.rejected == [] and data.total == 0
+
+
+def products_plus(tmp_path, **columns):
+    """The real master with extra columns appended, written to tmp_path."""
+    frame = pd.read_csv(PRODUCTS_CSV, dtype={"sku": str})
+    for name, values in columns.items():
+        frame[name] = values
+    path = tmp_path / "products.csv"
+    frame.to_csv(path, index=False)
+    return path
+
+
+def test_a_column_the_schema_never_heard_of_still_reaches_the_reader(conn, tmp_path):
+    """An attribute the project has not met before is still an attribute. A
+    richer feed returning more fields should not need this module edited before
+    any of them can be seen."""
+    path = products_plus(tmp_path, npu_tops=[50, 50, 47, 50])
+    ingest_products(conn, path)
+    products = read_products(conn)
+    assert "npu_tops" in products.columns
+    assert sorted(products["npu_tops"].unique()) == ["47", "50"]
+
+
+def test_the_known_columns_keep_their_constraints_alongside_an_extra_one(conn, tmp_path):
+    """Carrying unknown columns must not loosen the checks on known ones."""
+    path = products_plus(tmp_path, npu_tops=[50, 50, 47, 50])
+    ingest_products(conn, path)
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("INSERT INTO products (sku, role, brand, model_name, cpu,"
+                     " ram_gb, storage_gb, screen_inch, form_factor,"
+                     " list_price, source_url) VALUES"
+                     " ('x', 'neither', 'b', 'm', 'c', 16, 512, 14, '2-in-1',"
+                     " 1.0, 'u')")
+
+
+def test_a_column_name_that_is_not_a_plain_identifier_is_refused():
+    """Column names cannot be parameterised, so they are validated rather than
+    interpolated. This is the only place a file's contents reaches SQL as
+    syntax instead of as a value."""
+    frame = pd.DataFrame(columns=list(PRODUCT_FIELDS) + ["x); DROP TABLE products; --"])
+    with pytest.raises(ValueError, match="unusable column names"):
+        extra_product_columns(frame)
+
+
+def test_a_master_with_no_extra_columns_adds_none():
+    frame = pd.DataFrame(columns=list(PRODUCT_FIELDS))
+    assert extra_product_columns(frame) == []

@@ -13,6 +13,7 @@ Nothing is ever repaired. A row that fails is reported with its line number.
 """
 from __future__ import annotations
 
+import re
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
@@ -92,6 +93,11 @@ PRICE_CSV_COLUMNS = [
 
 MONEY_COLUMNS = ("price", "regular_price", "savings")
 
+#: A product column name this module will put into SQL. Identifiers cannot be
+#: parameterised, so the only safe way to accept one from a file is to refuse
+#: everything that is not a plain name.
+SAFE_COLUMN = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,62}$")
+
 
 @dataclass(frozen=True)
 class Rejection:
@@ -143,17 +149,38 @@ def _cell(value: Any) -> Any:
     return None if text == "" or text.lower() == "nan" else value
 
 
+def extra_product_columns(frame: pd.DataFrame) -> list[str]:
+    """Columns the master carries that the schema does not name.
+
+    A product attribute the project has not met before is still an attribute:
+    dropping it here would mean a column added to the CSV, or returned by a
+    richer feed, never reaching the page. They are carried as TEXT and without
+    constraints, because nothing is known about them yet, and a name that is
+    not a plain identifier is refused rather than interpolated into SQL.
+    """
+    unknown = [c for c in frame.columns if c not in PRODUCT_FIELDS]
+    bad = [c for c in unknown if not SAFE_COLUMN.match(str(c))]
+    if bad:
+        raise ValueError(f"products file has unusable column names: {bad}")
+    return unknown
+
+
 def ingest_products(conn: sqlite3.Connection, csv_path: Path | str) -> int:
     frame = pd.read_csv(csv_path, dtype={"sku": str, "model_number": str})
     missing = [c for c in PRODUCT_FIELDS if c not in frame.columns]
     if missing:
         raise ValueError(f"products file missing columns: {missing}")
 
-    statement = (f"INSERT INTO products ({', '.join(PRODUCT_FIELDS)}) "
-                 f"VALUES ({', '.join('?' for _ in PRODUCT_FIELDS)})")
+    extra = extra_product_columns(frame)
+    for column in extra:
+        conn.execute(f"ALTER TABLE products ADD COLUMN {column} TEXT")
+
+    fields = PRODUCT_FIELDS + extra
+    statement = (f"INSERT INTO products ({', '.join(fields)}) "
+                 f"VALUES ({', '.join('?' for _ in fields)})")
     count = 0
-    for record in frame[PRODUCT_FIELDS].to_dict("records"):
-        conn.execute(statement, [_cell(record[f]) for f in PRODUCT_FIELDS])
+    for record in frame[fields].to_dict("records"):
+        conn.execute(statement, [_cell(record[f]) for f in fields])
         count += 1
     conn.commit()
     return count
