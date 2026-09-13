@@ -69,6 +69,7 @@ def prompt_for(product: Any, ask: Callable[[str], str]) -> dict[str, str] | obje
         "availability": availability,
         "seller": ask("  sold by [Best Buy]: ").strip() or "Best Buy",
         "stock_hint": ask("  stock hint (blank if none): ").strip(),
+        "pickup_eta": ask("  pickup (today, or a date like 2026-09-18): ").strip(),
         "note": ask("  note (blank if none): ").strip(),
     }
     return row
@@ -82,14 +83,28 @@ def already_recorded(prices_csv: Path | str, sku: str, stamp: str) -> bool:
                  (frame["captured_at_local"] == stamp)).any())
 
 
+def landing_header(prices_csv: Path | str) -> list[str]:
+    """The landing file's own column order.
+
+    Read, never assumed. The file gains columns as a capture starts recording
+    more, and writing a fixed list into a wider file shifts every later value
+    one column left without raising anything: `note` would land in
+    `pickup_eta` and the note would be lost.
+    """
+    with open(prices_csv, newline="", encoding="utf-8") as handle:
+        return next(csv.reader(handle), None) or list(PRICE_CSV_COLUMNS)
+
+
 def append_rows(prices_csv: Path | str, stamp: str,
                 rows: Iterable[dict[str, str]]) -> int:
     """Append to the landing file. Existing rows are never rewritten."""
+    header = landing_header(prices_csv)
     written = 0
     with open(prices_csv, "a", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=PRICE_CSV_COLUMNS)
+        writer = csv.DictWriter(handle, fieldnames=header)
         for row in rows:
-            writer.writerow({**row, "captured_at_local": stamp})
+            full = {**row, "captured_at_local": stamp}
+            writer.writerow({c: full.get(c, "") for c in header})
             written += 1
     return written
 

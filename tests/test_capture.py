@@ -16,7 +16,7 @@ from tracker.capture import (
 
 PRODUCTS_CSV = "data/structured/products.csv"
 HEADER = ("sku,captured_at_local,price,regular_price,savings,"
-          "availability,seller,stock_hint,note\n")
+          "availability,seller,stock_hint,pickup_eta,note\n")
 NOW = datetime(2026, 9, 12, 21, 0)
 
 
@@ -55,17 +55,18 @@ def test_pages_are_opened_not_fetched():
     assert opened == ["https://example.com/a", "https://example.com/b"]
 
 
-def test_prompt_collects_the_six_observed_fields():
+def test_prompt_collects_the_seven_observed_fields():
     row = prompt_for(a_product(), answers(
-        "1", "1299.99", "", "", "", "Only 1 left", ""))
+        "1", "1299.99", "", "", "", "Only 1 left", "today", ""))
     assert row["availability"] == "Add to cart"
     assert row["price"] == "1299.99"
     assert row["seller"] == "Best Buy"
     assert row["stock_hint"] == "Only 1 left"
+    assert row["pickup_eta"] == "today"
 
 
 def test_prompt_allows_a_blank_price_when_not_purchasable():
-    row = prompt_for(a_product(), answers("2", "", "", "", "", "", ""))
+    row = prompt_for(a_product(), answers("2", "", "", "", "", "", "", ""))
     assert row["availability"] == "Unavailable" and row["price"] == ""
 
 
@@ -75,7 +76,7 @@ def test_prompt_skips_on_a_blank_availability():
 
 def test_prompt_reasks_on_an_invalid_availability():
     row = prompt_for(a_product(), answers(
-        "9", "1", "1299.99", "", "", "", "", ""))
+        "9", "1", "1299.99", "", "", "", "", "", ""))
     assert row["availability"] == "Add to cart"
 
 
@@ -83,19 +84,19 @@ def test_append_writes_the_session_timestamp_into_every_row(prices):
     append_rows(prices, "2026-09-12T21:00", [
         {"sku": "6672159", "price": "1299.99", "regular_price": "", "savings": "",
          "availability": "Add to cart", "seller": "Best Buy",
-         "stock_hint": "", "note": ""}])
+         "stock_hint": "", "pickup_eta": "today", "note": ""}])
     frame = pd.read_csv(prices, dtype={"sku": str})
     assert frame.loc[0, "captured_at_local"] == "2026-09-12T21:00"
 
 
 def test_append_never_rewrites_an_existing_row(prices):
     prices.write_text(
-        HEADER + "6668002,2026-09-12T15:07,1299.99,,,Add to cart,Best Buy,,\n",
+        HEADER + "6668002,2026-09-12T15:07,1299.99,,,Add to cart,Best Buy,,today,\n",
         encoding="utf-8")
     append_rows(prices, "2026-09-12T21:00", [
         {"sku": "6672159", "price": "1199.99", "regular_price": "", "savings": "",
          "availability": "Add to cart", "seller": "Best Buy",
-         "stock_hint": "", "note": ""}])
+         "stock_hint": "", "pickup_eta": "today", "note": ""}])
     frame = pd.read_csv(prices, dtype={"sku": str})
     assert len(frame) == 2
     assert frame.loc[0, "price"] == 1299.99
@@ -103,7 +104,7 @@ def test_append_never_rewrites_an_existing_row(prices):
 
 def test_already_recorded_detects_a_repeat_of_the_same_session(prices):
     prices.write_text(
-        HEADER + "6672159,2026-09-12T21:00,1299.99,,,Add to cart,Best Buy,,\n",
+        HEADER + "6672159,2026-09-12T21:00,1299.99,,,Add to cart,Best Buy,,today,\n",
         encoding="utf-8")
     assert already_recorded(prices, "6672159", "2026-09-12T21:00")
     assert not already_recorded(prices, "6672159", "2026-09-12T22:00")
@@ -112,7 +113,7 @@ def test_already_recorded_detects_a_repeat_of_the_same_session(prices):
 def test_main_records_every_product_and_validates(prices, capsys):
     replies = []
     for _ in range(4):
-        replies += ["1", "1299.99", "", "", "", "", ""]
+        replies += ["1", "1299.99", "", "", "", "", "today", ""]
     code = main(ask=answers(*replies), opener=lambda _url: None, now=NOW,
                 products_csv=PRODUCTS_CSV, prices_csv=prices)
     assert code == 0
@@ -125,7 +126,7 @@ def test_main_records_every_product_and_validates(prices, capsys):
 def test_main_reports_a_row_the_store_refuses(prices, capsys):
     """A purchasable listing with no price is refused by the schema, and the
     operator is told at once rather than finding out at the dashboard."""
-    replies = ["1", "", "", "", "", "", ""]
+    replies = ["1", "", "", "", "", "", "today", ""]
     for _ in range(3):
         replies += [""]
     code = main(ask=answers(*replies), opener=lambda _url: None, now=NOW,
@@ -138,3 +139,29 @@ def test_main_returns_one_when_everything_is_skipped(prices):
     code = main(ask=answers("", "", "", ""), opener=lambda _url: None, now=NOW,
                 products_csv=PRODUCTS_CSV, prices_csv=prices)
     assert code == 1
+
+
+def test_a_note_never_lands_in_the_pickup_column(prices):
+    """The landing file gains columns. Writing a fixed column list into a
+    wider file shifts every later value one place left without raising
+    anything, and the note would be lost inside pickup_eta."""
+    append_rows(prices, "2026-09-12T21:00", [
+        {"sku": "6672159", "price": "1299.99", "regular_price": "",
+         "savings": "", "availability": "Add to cart", "seller": "Best Buy",
+         "stock_hint": "", "pickup_eta": "2026-09-18", "note": "read 21:13"}])
+    frame = pd.read_csv(prices, dtype=str, keep_default_na=False)
+    assert frame.loc[0, "pickup_eta"] == "2026-09-18"
+    assert frame.loc[0, "note"] == "read 21:13"
+
+
+def test_a_column_the_helper_cannot_fill_is_left_blank(prices, tmp_path):
+    """A file wider than this helper knows about still lines up."""
+    wide = tmp_path / "wide.csv"
+    wide.write_text(HEADER.replace("note", "operator,note"), encoding="utf-8")
+    append_rows(wide, "2026-09-12T21:00", [
+        {"sku": "6672159", "price": "1299.99", "regular_price": "",
+         "savings": "", "availability": "Add to cart", "seller": "Best Buy",
+         "stock_hint": "", "pickup_eta": "today", "note": "kept"}])
+    frame = pd.read_csv(wide, dtype=str, keep_default_na=False)
+    assert frame.loc[0, "operator"] == ""
+    assert frame.loc[0, "note"] == "kept"
