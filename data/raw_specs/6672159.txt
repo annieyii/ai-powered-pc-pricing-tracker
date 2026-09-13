@@ -1,0 +1,221 @@
+Lenovo - Yoga 7a 2-in-1 14" 2K OLED Touchscreen Laptop - AMD Ryzen AI 5 430 2026- 16GB Memory - 512GB SSD - Copilot+ PC - Seashell
+
+Key Specs
+Screen Size
+14 inches
+Screen Resolution
+1920 x 1200 (WUXGA)
+Touch Screen
+Yes
+Refresh Rate
+60Hz
+Brightness
+400 nits
+Processor Model
+AMD Ryzen AI 400 Series
+CPU Base Clock Frequency
+2 gigahertz
+Storage Type
+SSD
+Total Storage Capacity
+512 gigabytes
+System Memory (RAM)
+16 gigabytes
+Graphics
+AMD Radeon 840M
+Display Connector(s)
+1 x HDMI 2.1, Display connection via USB port
+Battery Life (up to)
+15 hours
+Battery Chemistry
+Lithium-polymer
+2-in-1 Design
+Yes
+Backlit Keyboard
+Yes
+General
+Brand
+Lenovo
+Model Number
+83TD0000US
+Product Name
+Yoga 7a 2-in-1 14" 2K OLED Touchscreen Laptop - AMD Ryzen AI 5 430 2026- 16GB Memory - 512GB SSD - Copilot+ PC
+Color
+Seashell
+Year of Release
+2026
+Display
+Display Type
+OLED
+Screen Size
+14 inches
+Screen Resolution
+1920 x 1200 (WUXGA)
+Touch Screen
+Yes
+Refresh Rate
+60Hz
+Brightness
+400 nits
+Processor
+Processor Brand
+AMD
+Processor Model
+AMD Ryzen AI 400 Series
+Processor Model Number
+AI 5 430
+Processor Model Year of Release
+2026
+CPU Base Clock Frequency
+2 gigahertz
+CPU Boost Clock Frequency
+4.5 gigahertz
+Number of CPU Cores
+4-core (quad-core)
+Number of CPU Threads
+8
+CPU Cache Memory Level
+L2, L3
+L2 Cache
+4 megabytes
+L3 Cache
+8 megabytes
+Neural Processing Unit (NPU)
+Yes
+Maximum NPU Performance
+50 trillions operations per second
+Storage
+Storage Type
+SSD
+Total Storage Capacity
+512 gigabytes
+Solid State Drive Capacity
+512 gigabytes
+Memory
+System Memory (RAM)
+16 gigabytes
+Type of Memory (RAM)
+LPDDR5X
+System Memory RAM Speed
+8000 megahertz
+Number Of Memory Slots
+0
+Graphics
+Graphics Type
+Integrated
+GPU Brand
+AMD Radeon
+Graphics
+AMD Radeon 840M
+Compatibility
+Operating System
+Windows 11 Home
+Connectivity
+Display Connector(s)
+1 x HDMI 2.1, Display connection via USB port
+Number of HDMI Outputs (Total)
+1
+Number of DisplayPort Outputs (Total)
+0
+Number of Thunderbolt Ports (Total)
+0
+DisplayPort Over USB-C
+DisplayPort 2.1
+USB Ports
+1 x USB-A 3.2, 2 x USB-C 3.2
+Number of USB Ports (Total)
+3
+Number of USB-C Charging Ports
+2
+Headphone Jack
+Yes
+Microphone Input
+Yes
+Wireless Connectivity
+Wi-Fi, Bluetooth
+Wireless Standard
+BE
+Wireless Networking Standard
+Wi-Fi 7
+Number Of Ethernet Ports
+0
+Power
+Power Supply Input
+USB-C
+Power Supply Maximum Wattage
+65 watts
+Battery Life (up to)
+15 hours
+Battery Cells
+4-cell
+Battery Capacity
+4525 milliampere hours
+Battery Chemistry
+Lithium-polymer
+Camera
+Front-Facing Camera
+Yes
+Front Facing Camera Megapixels
+5 megapixels
+Built-In Microphone
+Yes
+Features
+2-in-1 Design
+Yes
+Backlit Keyboard
+Yes
+Customizable Keyboard Lighting
+No
+GPS Enabled
+Yes
+Touchpad Type
+Multi-touch, Precision
+Media Card Reader
+Yes
+Media Card Slot
+microSD
+Audio Technology
+High Definition (HD) Audio, Realtek ALC3306 codec
+Speaker Type
+4 stereo speakers, 2W x2 (woofers), 2W x2 (tweeters), optimized with Dolby Atmos, Smart Amplifier (AMP)
+Windows AI
+Copilot+ PC
+Security Features
+Privacy camera, Fingerprint reader
+Cable Lock Slot
+None
+Casing Material
+Aluminum
+Dimensions
+Product Height
+0.61 inches
+Product Width
+8.95 inches
+Product Depth
+12.45 inches
+Product Weight
+3.04 pounds
+Certifications Listings & Approvals
+ENERGY STAR Certified
+Yes
+EPEAT Level
+Gold
+Included
+Optical Drive Type
+None
+Numeric Keypad
+No
+Stylus Included
+No
+Warranty
+Warranty - Parts
+1 year
+Warranty - Labor
+1 year
+Other
+UPC
+199272785583
+BSIN
+JJGH36L8FL
+SKU
+6672159

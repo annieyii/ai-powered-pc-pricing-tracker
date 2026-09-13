@@ -1,0 +1,197 @@
+HP - OmniBook X Flip 2-in-1 - 14" 2K OLED Touchscreen Laptop - Intel Core Ultra 5 (2026) - 16GB Memory - 512GB SSD - Copilot+ - Meteor Silver
+
+Key Specs
+Screen Type
+UWVA
+Screen Size
+14 inches
+Screen Resolution
+1920 x 1200 (Full HD+)
+Touch Screen
+Yes
+Brightness
+300 nits
+Processor Model
+Intel Core Ultra 5 Series 3
+Storage Type
+SSD
+Total Storage Capacity
+512 gigabytes
+System Memory (RAM)
+16 gigabytes
+Graphics
+Intel Graphics
+Display Connector(s)
+1 x HDMI 2.1, 2 x Thunderbolt 4
+Battery Life (up to)
+32.5 hours
+Battery Chemistry
+Lithium-ion polymer
+2-in-1 Design
+Yes
+Backlit Keyboard
+Yes
+General
+Brand
+HP
+Model Number
+14-KB0013DX/D31MDUA#ABA
+Product Name
+OmniBook X Flip 2-in-1 - 14" 2K OLED Touchscreen Laptop - Intel Core Ultra 5 (2026) - 16GB Memory - 512GB SSD - Copilot+
+Color
+Meteor Silver
+Year of Release
+2026
+Display
+Display Type
+OLED
+Screen Type
+UWVA
+Screen Size
+14 inches
+Screen Resolution
+1920 x 1200 (Full HD+)
+Touch Screen
+Yes
+Brightness
+300 nits
+Processor
+Processor Brand
+Intel
+Processor Model
+Intel Core Ultra 5 Series 3
+Processor Model Number
+325
+Processor Model Year of Release
+2026
+CPU Boost Clock Frequency
+4.5 gigahertz
+Number of CPU Cores
+8-core
+Number of CPU Threads
+8
+CPU Cache Memory Level
+L3
+L3 Cache
+12 megabytes
+Neural Processing Unit (NPU)
+Yes
+Maximum NPU Performance
+47 trillions operations per second
+Storage
+Storage Type
+SSD
+Total Storage Capacity
+512 gigabytes
+Solid State Drive Capacity
+512 gigabytes
+Solid State Drive Interface
+PCIe 4.0
+Memory
+System Memory (RAM)
+16 gigabytes
+Type of Memory (RAM)
+LPDDR5X
+System Memory RAM Speed
+7467 megahertz
+Graphics
+Graphics Type
+Integrated
+GPU Brand
+Intel
+Graphics
+Intel Graphics
+Compatibility
+Operating System
+Windows 11 Home
+Connectivity
+Display Connector(s)
+1 x HDMI 2.1, 2 x Thunderbolt 4
+Number of HDMI Outputs (Total)
+1
+Number of DisplayPort Outputs (Total)
+0
+Number of Thunderbolt Ports (Total)
+2
+USB Ports
+2 x USB-A 3.1
+Number of USB Ports (Total)
+2
+Headphone Jack
+Yes
+Microphone Input
+Yes
+Wireless Connectivity
+Bluetooth, Wi-Fi
+Wireless Networking Standard
+Wi-Fi 7
+Number Of Ethernet Ports
+0
+Power
+Power Supply Maximum Wattage
+65 watts
+Battery Life (up to)
+32.5 hours
+Battery Cells
+3-cell
+Battery Chemistry
+Lithium-ion polymer
+Camera
+Front-Facing Camera
+Yes
+Front Facing Camera Megapixels
+5 megapixels
+Built-In Microphone
+Yes
+Features
+2-in-1 Design
+Yes
+Backlit Keyboard
+Yes
+Media Card Reader
+No
+Audio Technology
+DTS: X Ultra
+Speaker Type
+Poly Studio with dual speakers
+Windows AI
+Copilot+ PC
+Security Features
+Privacy camera
+Casing Material
+Aluminum
+Dimensions
+Product Height
+0.57 inches
+Product Width
+12.32 inches
+Product Depth
+8.6 inches
+Product Weight
+3.09 pounds
+Certifications Listings & Approvals
+ENERGY STAR Certified
+Yes
+EPEAT Registered
+Yes
+EPEAT Level
+Gold
+Included
+Included Software
+HP App, HP Support Assistant, HP BIOS Protection, Presence Sensing, Smart Sense, HP Connection Optimizer, Battery Manager, Microsoft Copilot, Advanced AI Noise reduction, DTS: X Ultra technology, DTS Sound Unbound, OMEN Gaming Hub, OMEN AI
+Optical Drive Type
+None
+Numeric Keypad
+No
+Warranty
+Warranty - Parts
+1 year
+Warranty - Labor
+1 year
+Other
+UPC
+199896411936
+BSIN
+JJGWKYZYCS
+SKU
+6667986

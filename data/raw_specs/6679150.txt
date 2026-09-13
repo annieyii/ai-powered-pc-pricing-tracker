@@ -1,0 +1,194 @@
+Dell - 14S - 14" 2K Touchscreen Laptop - AMD Ryzen AI 5 430 2026 - 16GB Memory - 512GB Storage - Copilot+ PC - Celestial Blue
+
+Key Specs
+Screen Size
+14 inches
+Screen Resolution
+1920 x 1200 (Full HD+)
+Touch Screen
+Yes
+Refresh Rate
+60Hz
+Brightness
+400 nits
+Processor Model
+AMD Ryzen AI 5 400 Series
+CPU Base Clock Frequency
+2 gigahertz
+Storage Type
+SSD
+Total Storage Capacity
+512 gigabytes
+System Memory (RAM)
+16 gigabytes
+Graphics
+AMD Radeon
+Display Connector(s)
+1 x HDMI 2.1
+Battery Chemistry
+Lithium-ion
+Backlit Keyboard
+Yes
+General
+Brand
+Dell
+Model Number
+LDS14265-A861BLU-PUS
+Product Name
+14S - 14" 2K Touchscreen Laptop - AMD Ryzen AI 5 430 2026 - 16GB Memory - 512GB Storage - Copilot+ PC
+Color
+Celestial Blue
+Year of Release
+2026
+Display
+Display Type
+LED
+Screen Size
+14 inches
+Screen Resolution
+1920 x 1200 (Full HD+)
+Touch Screen
+Yes
+Refresh Rate
+60Hz
+Display Surface
+Anti-glare
+Brightness
+400 nits
+Color Gamut (NTSC)
+45 percent
+Processor
+Processor Brand
+AMD
+Processor Model
+AMD Ryzen AI 5 400 Series
+Processor Model Number
+Ryzen AI 5 430
+Processor Model Year of Release
+2026
+CPU Base Clock Frequency
+2 gigahertz
+CPU Boost Clock Frequency
+4.5 gigahertz
+Number of CPU Cores
+4-core (quad-core)
+Number of CPU Threads
+8
+CPU Cache Memory Level
+L2, L3
+L2 Cache
+4 megabytes
+L3 Cache
+8 megabytes
+Neural Processing Unit (NPU)
+Yes
+Maximum NPU Performance
+50 trillions operations per second
+Storage
+Storage Type
+SSD
+Total Storage Capacity
+512 gigabytes
+Solid State Drive Capacity
+512 gigabytes
+Solid State Drive Interface
+PCIe
+Memory
+System Memory (RAM)
+16 gigabytes
+Type of Memory (RAM)
+LPDDR5X
+System Memory RAM Speed
+7500 megahertz
+System Memory RAM Expandable To
+32 gigabytes
+Graphics
+Graphics Type
+Integrated
+GPU Brand
+AMD Radeon
+Graphics
+AMD Radeon
+Compatibility
+Operating System
+Windows 11 Home
+Operating System Architecture
+64-bit
+Connectivity
+Display Connector(s)
+1 x HDMI 2.1
+Number of HDMI Outputs (Total)
+1
+USB Ports
+2 x USB-A 3.2, 2 x USB-C 4
+Number of USB Ports (Total)
+4
+Wireless Connectivity
+Bluetooth, Wi-Fi
+Wireless Standard
+BE
+Wireless Networking Standard
+Wi-Fi 7
+Cooling
+CPU Cooling System
+Air
+Power
+Power Supply Input
+USB-C
+Power Supply Maximum Wattage
+65 watts
+Battery Cells
+3-cell
+Battery Capacity
+70 milliampere hours
+Battery Chemistry
+Lithium-ion
+Camera
+Front-Facing Camera
+Yes
+Features
+Backlit Keyboard
+Yes
+Audio Technology
+Dolby Atomos Core with Smart Amplifier
+Speaker Type
+2 tuned speakers
+Windows AI
+Copilot+ PC
+Dimensions
+Product Height
+0.45 inches
+Product Width
+12.35 inches
+Product Depth
+8.82 inches
+Product Weight
+3.33 pounds
+Certifications Listings & Approvals
+ENERGY STAR Certified
+Yes
+EPEAT Registered
+Yes
+EPEAT Level
+Gold
+Included
+Included Software
+McAfee LiveSafe 30-day trial, CyberLink PhotoDirector Essential
+Optical Drive Type
+None
+Numeric Keypad
+No
+Stylus Included
+No
+Warranty
+Warranty - Parts
+1 Year Basic Onsite Service after remote diagnosis with Hardware
+Warranty - Labor
+1 Year Basic Onsite Service after remote diagnosis with Hardware
+Other
+UPC
+884116652861
+BSIN
+J3K4L6QKRS
+SKU
+6679150
