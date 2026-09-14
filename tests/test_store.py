@@ -299,3 +299,15 @@ def test_a_third_strict_product_is_refused(tmp_path):
         build(path, PRICES_CSV)
     assert "pair" in str(caught.value)
 
+
+@pytest.mark.parametrize("column", ["operating_system", "device_type"])
+def test_a_strict_product_that_states_no_rule_field_is_refused(tmp_path, column):
+    """`IS NOT` makes a null disagree with a value, but two nulls agree. Blank
+    the same nullable rule field on both strict rows and the field switched
+    itself off while the page went on naming it as matched."""
+    path = _master(tmp_path, changes=[("6672159", column, ""),
+                                      ("6668002", column, "")])
+    with pytest.raises(ValueError) as caught:
+        build(path, PRICES_CSV)
+    assert "equivalence rule" in str(caught.value)
+

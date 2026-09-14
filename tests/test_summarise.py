@@ -70,9 +70,13 @@ class FakeClient:
 
 
 def _product_line(sku, role, brand, model_name, brightness):
+    # operating_system is stated rather than blank: the store refuses a strict
+    # product that leaves a field the equivalence rule names unsaid, because
+    # two blanks agree with each other and switch the check off.
     return (f"{sku},{role},{brand},{model_name},MN-{sku},Aria 5 430,16,512,14,"
-            f"OLED,{brightness},2-in-1,,Laptop,Acme Radeon 840M,Yes,1920x1200,"
-            f"1299.99,https://example.invalid/{sku}")
+            f"OLED,{brightness},2-in-1,Windows 11 Home,Laptop,"
+            f"Acme Radeon 840M,Yes,1920x1200,1299.99,"
+            f"https://example.invalid/{sku}")
 
 
 def dataset_for(tmp_path, price_rows):

@@ -92,6 +92,21 @@ BEGIN
                       OR form_factor      IS NOT NEW.form_factor));
 END;
 
+-- `IS NOT` treats a null as a disagreement, but two nulls agree, so blanking
+-- the same nullable rule field on both strict rows quietly switched that field
+-- off. A field the rule names and the row does not state cannot be checked, so
+-- the row is refused. Five of the seven are already NOT NULL; naming all seven
+-- keeps the rule readable in one place and survives a schema change.
+CREATE TRIGGER strict_products_must_state_every_rule_field
+AFTER INSERT ON products
+WHEN NEW.role = 'strict'
+BEGIN
+    SELECT RAISE(ABORT, 'a strict product must state every field the equivalence rule uses')
+    WHERE NEW.cpu IS NULL OR NEW.ram_gb IS NULL OR NEW.storage_gb IS NULL
+       OR NEW.screen_inch IS NULL OR NEW.operating_system IS NULL
+       OR NEW.device_type IS NULL OR NEW.form_factor IS NULL;
+END;
+
 -- A third member turns the pair's delta into a min-max range across products
 -- never claimed equivalent to each other.
 CREATE TRIGGER the_strict_group_is_a_pair
@@ -195,7 +210,11 @@ def extra_product_columns(frame: pd.DataFrame) -> list[str]:
 
 
 def ingest_products(conn: sqlite3.Connection, csv_path: Path | str) -> int:
-    frame = pd.read_csv(csv_path, dtype={"sku": str, "model_number": str})
+    # Read as text, like the landing file, and let the schema's affinity do the
+    # converting. Inferring types here ran a column with one blank cell through
+    # float, so `15` reached the page as `15.0`, and a column the schema does
+    # not name is stored as TEXT anyway.
+    frame = pd.read_csv(csv_path, dtype=str, keep_default_na=False)
     missing = [c for c in PRODUCT_FIELDS if c not in frame.columns]
     if missing:
         raise ValueError(f"products file missing columns: {missing}")
