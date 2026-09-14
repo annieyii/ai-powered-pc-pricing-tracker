@@ -67,7 +67,11 @@ def test_ingest_products_loads_the_real_master(conn):
     assert ingest_products(conn, PRODUCTS_CSV) == 4
     frame = read_products(conn)
     assert set(frame["role"]) == {"strict", "reference"}
-    assert frame["sku"].dtype == object
+    # Not a dtype assertion. pandas 2 returns object here and pandas 3 returns
+    # its str dtype, and the project supports both; what matters either way is
+    # that a SKU is not a number, because one read as an integer stops matching
+    # the strings every other frame keys on.
+    assert all(isinstance(sku, str) for sku in frame["sku"])
     assert (frame["role"] == "strict").sum() == 2
 
 

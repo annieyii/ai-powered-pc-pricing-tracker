@@ -10,12 +10,23 @@ on:
 jobs:
   pytest:
     runs-on: ubuntu-latest
+
+    # The README says Python 3.10 or newer, and the lockfile resolves a
+    # different pandas for each end of that range. One job proves whichever
+    # version it happened to pick, which is how a test pinned to pandas 2's
+    # object dtype passed for as long as it did.
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.13"]
+
     steps:
       - uses: actions/checkout@v4
 
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          python-version: ${{ matrix.python }}
 
       # --locked, so a lockfile that has drifted from pyproject.toml fails here
       # rather than resolving to something nobody has run.
