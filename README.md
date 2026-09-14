@@ -13,7 +13,7 @@ uv sync
 uv run streamlit run tracker/app.py
 ```
 
-**No API key, no LLM endpoint, no database and no environment variable is required.** Every section of the dashboard renders deterministically without one.
+**No API key, no LLM endpoint, no persistent database and no environment variable is required.** The store is an in-memory SQLite database rebuilt on every page load, so there is nothing to create or migrate. Every section of the dashboard renders deterministically.
 
 Without `uv`, the standard Python path works too:
 
@@ -31,7 +31,7 @@ streamlit run tracker/app.py
 Python 3.10 or newer.
 
 ```bash
-uv run pytest                           # 296 tests, none reaching the network
+uv run pytest                           # 297 tests, none reaching the network
 ```
 
 Two optional buttons on the page call a language model. Without an endpoint they are disabled and name the variable that is missing, which is the expected state rather than a failure. To enable them, fill in `.env` and export it, because nothing here reads `.env` for you:
@@ -62,7 +62,7 @@ No code change is needed.
 | `regular_price` | The struck-through or comparison price, blank when there is no promotion |
 | `savings` | The stated saving, blank when there is none |
 | `availability` | `Add to cart`, `Unavailable` or `Sold Out` |
-| `seller` | The "Sold by" text |
+| `seller` | The "Sold by" text, exactly as shown. Blank if the page does not state it: the schema refuses the row rather than letting an unread field default to `Best Buy` |
 | `stock_hint` | The stock note as written, blank if none |
 | `pickup_eta` | `today`, or a date like `2026-09-18`. `today` is a state, not the capture date |
 | `note` | Optional free text: promotion expiry or countdown, page badges, shipping context. Not a structured field and not watched by the change detector, but `insights.py` reads a stated promotion end date out of it |

@@ -1,6 +1,6 @@
 # Raw specification text
 
-**The `<sku>.txt` files are not published in this repository.**
+**The `<sku>.txt` files are not part of the current repository tree.**
 
 One file per SKU, named `<sku>.txt`, holds the product title followed by the
 Specifications block copied verbatim from that SKU's Best Buy product page.
@@ -12,7 +12,9 @@ Publishing them would mean redistributing Best Buy page content, which the site
 terms restrict. The written explanation submitted with this repository says
 collection was kept manual for that reason, and shipping the same content here
 would contradict it. So the files are kept locally and excluded from version
-control. The extraction code, the hand-verified `products.csv`, and the
+control. They were tracked earlier in this repository's history and commits
+before the removal still contain them; this removes them going forward rather
+than rewriting a published history. The extraction code, the hand-verified `products.csv`, and the
 field-by-field `extraction_review.<model>.csv` are all present, so the method
 and its results can still be read; only the copied page text is absent.
 
