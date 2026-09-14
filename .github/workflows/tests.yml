@@ -1,0 +1,26 @@
+# The claim the README makes is that the suite passes on a clean machine with
+# no endpoint, no key and no network. That is worth checking somewhere other
+# than the machine it was written on, which is the whole job of this file.
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # --locked, so a lockfile that has drifted from pyproject.toml fails here
+      # rather than resolving to something nobody has run.
+      - run: uv sync --locked
+
+      # No LLM_* or BESTBUY_API_KEY is set for this job. A test that started
+      # needing one would fail, which is the point.
+      - run: uv run pytest -q
