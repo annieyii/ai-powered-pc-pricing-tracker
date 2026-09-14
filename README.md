@@ -18,7 +18,8 @@ uv run streamlit run tracker/app.py
 Without `uv`, the standard Python path works too:
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\Activate.ps1
 pip install -e .
 streamlit run tracker/app.py
 ```
@@ -30,7 +31,7 @@ streamlit run tracker/app.py
 Python 3.10 or newer.
 
 ```bash
-uv run pytest                           # 295 tests, none reaching the network
+uv run pytest                           # 296 tests, none reaching the network
 ```
 
 Two optional buttons on the page call a language model. Without an endpoint they are disabled and name the variable that is missing, which is the expected state rather than a failure. To enable them, fill in `.env` and export it, because nothing here reads `.env` for you:
@@ -95,7 +96,7 @@ The point of the shape is that the answer is computed before anything is said ab
 
 | Where | What it does | What bounds it |
 |---|---|---|
-| `extract.py` | reads a raw spec block into twelve fields | a pydantic schema that forbids unexpected keys, deterministic validators, and a score against the hand-verified master. It can never write to that master |
+| `extract.py` | reads a raw spec block into twelve fields | a Pydantic schema that forbids unexpected keys, deterministic validators, and a score against the hand-verified master. It can never write to that master |
 | `insights.select_with_model` | returns the indices of the findings to lead with | it is handed finished sentences and asked only for integers, so it cannot state a figure. One bad index discards the whole reply |
 | `summarise.summarise` | writes at most 150 words from the computed values | every number in the reply must appear in those values or the whole summary is thrown away, retried once, then replaced by a deterministic one |
 
@@ -114,12 +115,15 @@ tracker/
   summarise.py    Summary context, prose generation, grounding check
   extract.py      Offline specification extraction, scored against the master
   capture.py      Prompts for a capture session and appends it
-  bestbuy.py      Products API adapter. Not integrated and not live-tested
+  bestbuy.py      Products API adapter. Not integrated, not live-tested, and
+                  fails closed: it supplies no value the API did not give it
 data/
   structured/
     products.csv          Product master, verified by hand
     prices_manual.csv     Append-only landing file, one row per SKU per capture
-  raw_specs/<sku>.txt     Verbatim page text, the input to extraction
+  raw_specs/            Verbatim page text, the input to extraction. Not
+                        published here; raw_specs/README.md says why and how
+                        to recreate it
   extraction_review.<model>.csv
                         Extraction scored field by field against the master.
                         The model is in the name so a second run adds a file
@@ -130,4 +134,6 @@ data/
 tests/                    One file per module
 ```
 
-Adding a column to either CSV needs no code change: the store carries columns the schema does not name, the sidebar grows a filter for any column the products disagree about, and the change detector watches it from its first change.
+For the manual capture and dashboard path, adding a column to either CSV needs no code change: the store carries columns the schema does not name, the sidebar grows a filter for any column the products disagree about, and the change detector watches it from its first change.
+
+The API adapter is deliberately stricter, and the difference is the point. It refuses to append until it can fill every column the landing file records, so a column it cannot map blocks it rather than landing as a blank. Two do today: `pickup_eta` needs a store-availability call it constructs but does not execute, and `seller` has no documented product attribute that verifies first-party against marketplace.

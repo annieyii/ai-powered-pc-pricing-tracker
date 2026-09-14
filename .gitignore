@@ -34,3 +34,7 @@ docs/*
 
 # Supplied reference material, not mine to redistribute
 files/
+
+# Verbatim Best Buy page text: local input to the offline extraction run, not
+# ours to redistribute. data/raw_specs/README.md says how to recreate it.
+data/raw_specs/*.txt
