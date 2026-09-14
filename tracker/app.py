@@ -228,29 +228,21 @@ def attribute_filter(column: str, label: str) -> None:
 with st.sidebar:
     st.header("Selection")
 
-    # The window comes first: this is a tracker, so when is the outer question
-    # and everything else narrows inside it. Its bounds are computed above the
-    # reset button because the reset writes them back.
+    # When is the outer question in a tracker, so the window comes first.
     earliest = data.prices["captured_at"].min().date()
     latest = data.prices["captured_at"].max().date()
 
     def reset_filters() -> None:
-        """Put every control that narrows the page back to its full default.
+        """Put every narrowing control back to its default.
 
-        Writes the defaults rather than deleting the keys. Deleting clears the
-        server's copy, and the page below does reset, but the control itself
-        goes on showing the selection the reader made: `default=` is read on a
-        widget's first render only, so nothing is sent that would replace what
-        the browser still holds. The next interaction then sends that stale
-        selection back and the page narrows again. Assigning is a change the
-        widget receives.
+        Assigns rather than deletes. `default=` is read on a widget's first
+        render only, so deleting the key resets the page but leaves the
+        control showing the old selection, which the next click sends back.
 
         A callback, not an `if st.button(...)` body, so the write lands after
-        the browser's values are applied and before the page reads them.
+        the browser's values arrive and before the page reads them.
 
-        Not `lead_with`. That is a reading preference, not a filter: clearing
-        it here would throw away what the reader asked to see first every time
-        they widened the data they were looking at.
+        `lead_with` is left alone: a reading preference, not a filter.
         """
         for column in filterable_columns(data.products):
             key = f"filter_{column}"
@@ -258,10 +250,8 @@ with st.sidebar:
                 st.session_state[key] = sorted(
                     data.products[column].dropna().unique().tolist())
         st.session_state["products"] = list(data.products["sku"])
-        # Read from `data` rather than closing over `earliest`/`latest`. A
-        # callback runs on the next script run, by which time this module's
-        # globals hold whatever the previous run left in them, and a name
-        # reused later in the file would arrive here as the wrong type.
+        # From `data`, not the `earliest`/`latest` globals: a callback runs
+        # on the next script run, against what the previous one left behind.
         st.session_state["window"] = (data.prices["captured_at"].min().date(),
                                       data.prices["captured_at"].max().date())
 
@@ -332,10 +322,9 @@ if (isinstance(window, (list, tuple)) and len(window) == 2
 scope = Scope(skus=None if set(picked) == set(every_sku) else tuple(picked),
               start=start, end=end)
 scoped = scope.apply(data.prices)
-# The product set the page is showing, not the master it was chosen from. A
-# summary written from the master under an active filter lists the excluded
-# products with null prices, which reads as missing data sitting beside a
-# correctly filtered chart: both halves true, the page wrong.
+# What the page is showing, not the master it was chosen from. Summarising
+# from the master lists excluded products with null prices, which reads as
+# missing data beside a correctly filtered chart.
 selected = data.products[data.products["sku"].isin(picked)]
 view = replace(data, prices=scoped, products=selected)
 filtered = scope.key() != Scope().key()
@@ -421,8 +410,8 @@ st.divider()
 
 # --------------------------------------------------------------- 1. trend
 st.header("1. Price over time")
-# Counts are deliberately absent. The sidebar changes them, and a caption that
-# states "the two reference SKUs" is wrong the moment a filter is used.
+# No counts: the sidebar changes them, so "the two reference SKUs" would be
+# wrong the moment a filter is used.
 st.caption("Every product in the selection is plotted. Those that satisfy the "
            "equivalence rule are drawn in full; reference SKUs are muted, "
            "because each differs from the pair on more than one field and none "
@@ -660,29 +649,49 @@ else:
         "observation at one moment; the difference is not attributed to any "
         "single attribute."))
 
-# ------------------------------------------------------------ 6. reference
-st.header("6. Reference products")
-st.caption("Muted on the chart and excluded from the comparison above. Each "
-           "differs from the strict pair on more than one field, so no "
-           "difference is attributed to any single attribute.")
+# ------------------------------------------------------------- 6. listings
+st.header("6. Tracked products and their listings")
+# Was reference-only, which left the two products the page is actually about
+# as the only ones a reader could not open. Every price here was read off a
+# page by hand, so every product gets the page it was read from.
+st.caption("Every price on this page was read by hand from the listing linked "
+           "below it.")
 
-reference = table[table["role"] == "reference"]
-for product in reference.itertuples():
+ROLE_SECTIONS = [
+    ("strict", "The equivalence pair",
+     "Matched on processor model, memory, storage, screen size, operating "
+     "system, device type and form factor. Only these two enter the "
+     "price-difference metric."),
+    ("reference", "Reference",
+     "Muted on the chart and outside the comparison. Each differs from the "
+     "pair on more than one field, so no difference is attributed to any "
+     "single attribute."),
+]
+
+
+def listing_line(product: Any) -> str:
+    """One product as a bullet, its name linking to the page it was read from."""
     price = "not observed" if pd.isna(product.price) else f"${product.price:,.2f}"
     note = ""
     if not pd.isna(product.savings) and product.savings:
         note = (f" — discounted ${product.savings:,.2f} from "
                 f"${product.regular_price:,.2f}")
-    st.write(usd(f"- **{product.brand} {product.model_name}** — {price}{note} · "
-                 f"{product.cpu} · {product.form_factor} · "
-                 f"{product.display_type} · {product.availability} · "
-                 f"[listing]({product.source_url})"))
+    return (f"- **[{product.brand} {product.model_name}]({product.source_url})** "
+            f"— {price}{note} · {product.cpu} · {product.form_factor} · "
+            f"{product.display_type} · {product.availability}")
+
+
+for role, heading, note in ROLE_SECTIONS:
+    rows = table[table["role"] == role]
+    if rows.empty:
+        continue
+    st.markdown(f"**{heading}**")
+    st.caption(note)
+    for product in rows.itertuples():
+        st.write(usd(listing_line(product)))
 
 st.divider()
-# "Every product here is $1,299.99 except one" was true of the master and
-# false of any selection that removed a product, and the two figures are in
-# the table above anyway. What the reader cannot read off that table is what
-# the comparison means, so that is what is left.
+# The figures are in the table above. What is not is what they mean.
 st.caption("Where a current price sits below the list price recorded in "
            "`products.csv`, that is promotional state rather than a change "
            "of list.")
