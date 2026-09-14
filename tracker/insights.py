@@ -47,14 +47,20 @@ ADD_TO_CART = "Add to cart"
 #: Kinds that describe a movement, as opposed to a state or its absence.
 CHANGE_KINDS = frozenset({
     "price_change", "parity_broken", "gap_widened", "gap_narrowed",
-    "availability_lost", "field_shift",
+    "availability_lost", "availability_regained", "field_shift",
 })
 
-#: Observation columns a generic change detector does not report, because a
-#: sharper detector already does (price, availability, the promotion figures),
-#: because they identify rather than describe (sku, captured_at), or because
-#: they are prose and every rewording would read as a movement (note). Every
-#: other column is watched, including ones the schema has never named.
+#: Observation columns the generic detector skips, and why. `sku` and
+#: `captured_at` identify rather than describe. `note` is prose, and every
+#: rewording of it would read as a movement. `price` and `availability` have
+#: sharper detectors above.
+#:
+#: `regular_price` and `savings` are the exception worth knowing about: they
+#: are skipped as promotion figures, and `promotion_active` reports the state
+#: they are in rather than a change to them. A stated regular price that moves
+#: while the sale price holds is therefore not reported as a movement, only
+#: restated in the next promotion line. Every other column is watched,
+#: including ones the schema has never named.
 NOT_WATCHED = frozenset({"sku", "captured_at", "price", "regular_price",
                          "savings", "availability", "note"})
 
@@ -143,6 +149,10 @@ RECENCY_FLOOR = 0.30
 RARITY = {
     "price_change": 1.00,
     "availability_lost": 0.90,
+    # Coming back is news, and less of it: a reader who missed the listing
+    # going away is told something changed, one who saw it go away learns the
+    # window closed.
+    "availability_regained": 0.70,
     "parity_broken": 0.85,
     "gap_widened": 0.75,
     "gap_narrowed": 0.75,
@@ -307,6 +317,12 @@ def _render_field_shift(f: dict[str, Any]) -> str:
             f"between {f['previous_at']} and {f['at']}.")
 
 
+def _render_availability_regained(f: dict[str, Any]) -> str:
+    return (f"{f['name']} became purchasable again, moving from "
+            f"{f['previous_availability']} to {f['availability']} between "
+            f"{f['previous_at']} and {f['at']}.")
+
+
 def _render_availability_lost(f: dict[str, Any]) -> str:
     return (f"{f['name']} moved from {f['previous_availability']} to "
             f"{f['availability']} between {f['previous_at']} and {f['at']}.")
@@ -328,6 +344,7 @@ RENDERERS: dict[str, Callable[[dict[str, Any]], str]] = {
     "stock_scarcity": _render_stock_scarcity,
     "field_shift": _render_field_shift,
     "availability_lost": _render_availability_lost,
+    "availability_regained": _render_availability_regained,
     "no_change": _render_no_change,
 }
 
@@ -495,11 +512,21 @@ def detect(prices: pd.DataFrame, products: pd.DataFrame,
                          "at": _stamp(current["captured_at"]),
                          "previous_at": _stamp(previous["captured_at"])}))
 
+            # Both directions. Reporting only the loss made a listing coming
+            # back in stock into no movement at all, which is the silence this
+            # module refuses everywhere else: a reader told nothing concludes
+            # nothing happened. A change between two states that are both
+            # unbuyable is a field_shift and is already reported as one.
             before = _value(previous, "availability")
             after = _value(current, "availability")
-            if before == ADD_TO_CART and after is not None and after != ADD_TO_CART:
+            crossing = (before is not None and after is not None
+                        and before != after
+                        and ADD_TO_CART in (before, after))
+            if crossing:
                 found.append(build(
-                    "availability_lost", (sku,), current["captured_at"],
+                    "availability_lost" if before == ADD_TO_CART
+                    else "availability_regained",
+                    (sku,), current["captured_at"],
                     {"sku": sku, "name": name_of(sku), "availability": after,
                      "previous_availability": before,
                      "at": _stamp(current["captured_at"]),
@@ -667,7 +694,8 @@ class Selection:
 KIND_GROUPS: dict[str, tuple[str, ...]] = {
     "Price movement": ("price_change", "parity_broken",
                        "gap_widened", "gap_narrowed"),
-    "Availability and stock": ("availability_lost", "field_shift",
+    "Availability and stock": ("availability_lost", "availability_regained",
+                               "field_shift",
                                "stock_scarcity"),
     "Promotions": ("promotion_active", "promotion_ending"),
     "Like-for-like position": ("parity_held", "no_change"),

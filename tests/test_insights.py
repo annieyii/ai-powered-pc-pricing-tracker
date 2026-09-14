@@ -322,10 +322,25 @@ def test_availability_lost_is_silent_while_the_listing_stays_buyable():
     assert "availability_lost" not in kinds(found)
 
 
-def test_availability_lost_is_silent_when_a_listing_came_back():
+def test_a_listing_coming_back_is_a_movement_of_its_own():
+    """Reporting only the loss made a return into no movement at all, and a
+    reader told nothing about a window reopening concludes it never did."""
     found = detect(prices([snap(LENOVO, T1, None, availability="Sold Out"),
                            snap(LENOVO, T3, 1299.99)]), BOTH_STRICT)
     assert "availability_lost" not in kinds(found)
+    back = only(found, "availability_regained")
+    assert back.facts["previous_availability"] == "Sold Out"
+    assert back.facts["availability"] == "Add to cart"
+
+
+def test_two_unbuyable_states_are_a_field_shift_not_an_availability_event():
+    """Sold Out to Unavailable is a change and is reported, but nothing about
+    whether the listing can be bought has changed."""
+    found = detect(prices([snap(LENOVO, T1, None, availability="Sold Out"),
+                           snap(LENOVO, T3, None, availability="Unavailable")]),
+                   BOTH_STRICT)
+    assert "availability_lost" not in kinds(found)
+    assert "availability_regained" not in kinds(found)
 
 
 # --- no_change is a finding, not a fallback -----------------------------
