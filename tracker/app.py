@@ -232,7 +232,9 @@ with st.sidebar:
         for stale in [k for k in st.session_state if k.startswith("filter_")]:
             del st.session_state[stale]
         st.session_state.pop("products", None)
-        st.session_state.pop("lead_with", None)
+        # Not `lead_with`. That is a reading preference, not a filter: clearing
+        # it here would throw away what the reader asked to see first every
+        # time they widened the data they were looking at.
         st.rerun()
 
     # The window comes first: this is a tracker, so when is the outer question
@@ -256,7 +258,16 @@ with st.sidebar:
     for column in lead:
         attribute_filter(column, filter_label(column))
 
-    with st.expander("More attributes"):
+    # An expander closes on every rerun, so choosing something inside it made
+    # the control vanish the moment it was used. It stays open while anything
+    # inside it is narrowing the page.
+    secondary_in_use = any(
+        set(st.session_state.get(f"filter_{column}", []))
+        != set(data.products[column].dropna().unique().tolist())
+        for column in rest
+        if f"filter_{column}" in st.session_state)
+
+    with st.expander("More attributes", expanded=secondary_in_use):
         if not any(data.products[c].dropna().nunique() > 1 for c in rest):
             st.caption("Every product on record shares these, so there is "
                        "nothing here to choose between yet.")

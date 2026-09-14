@@ -1,39 +1,15 @@
 # PC Pricing Tracker (Best Buy)
 
-Tracks the listed price of four comparable 14-inch Windows Copilot+ PCs on Best Buy,
-and compares the two that match on a stated equivalence rule. The question it is built
-to answer is narrow on purpose: where does one SKU sit against a like-for-like
-competitor, and is that position moving.
+Tracks the listed price of four comparable 14-inch Windows Copilot+ PCs on Best Buy
+and compares the two that match on a stated equivalence rule. The question is narrow
+on purpose: where does one SKU sit against a like-for-like competitor, and is that
+position moving.
 
-The reasoning behind the product choice, the equivalence rule, the assumptions and the
-limitations is in the written explanation, not here. This file is how to run it.
+Prices are recorded by hand into an append-only CSV. Every page load rebuilds an
+in-memory SQLite database from it, and the schema is what refuses a bad row.
 
-## What it does
-
-Running the app gives you a Streamlit page with a headline result and six numbered
-sections, in this order:
-
-1. **Price over time**, the trend chart. Every tracked product is plotted: the
-   strict pair in full, the reference SKUs muted and marked in the legend.
-2. **What the observations say**, the findings detected between consecutive
-   captures, price and otherwise.
-3. **Observation summary**, a short written read of what the figures show. Every
-   figure in it appears among the computed values before it is displayed.
-4. **Latest observation per product**, one row per selected SKU with its own
-   capture time.
-5. **Strict group matched-pair observation**, the price difference between the two
-   strict SKUs at the most recent capture time where both carried a usable price.
-6. **Reference products**, listed for context and excluded from the price
-   difference above. They are on the chart, muted, because a reader asks where the
-   other tracked machines sit.
-
-Prices are recorded by hand. Each observation is appended to
-`data/structured/prices_manual.csv`, which is the system of record. On every page
-load the app rebuilds an in-memory SQLite database from the two CSVs, and that
-database is what refuses bad rows. Nothing is called on page load, so the app starts
-with no API key and no model available. Two buttons do call a model when a reader
-presses them; both are disabled when no endpoint is configured, and both sections
-fall back to deterministic output.
+The reasoning behind the product choice, the equivalence rule, the assumptions and
+the limitations is in the written explanation. This file is how to run it.
 
 ## Running it
 
@@ -41,68 +17,78 @@ Requires [uv](https://docs.astral.sh/uv/) and Python 3.10 or newer.
 
 ```bash
 uv sync
+uv run streamlit run tracker/app.py     # the dashboard
+uv run pytest                           # 278 tests, none reaching the network
+```
+
+That is the whole setup: no database to create, no environment variable, no API key.
+Every section renders deterministically without one.
+
+Two optional buttons on the page call a language model. Without an endpoint they are
+disabled and name the variable that is missing, which is the expected state rather
+than a failure. To enable them, fill in `.env` and export it, because nothing here
+reads `.env` for you:
+
+```bash
+set -a; source .env; set +a
 uv run streamlit run tracker/app.py
 ```
 
-That is the whole setup for reviewing the tracker. There is no database file to
-create, no environment variable to set, and no API key: the SQLite store is built in
-memory from the CSVs when the page loads, and every section renders deterministically.
-
-The page carries two optional model buttons. Without an endpoint they are disabled and
-say which variable is missing, which is the expected state rather than a failure. To
-enable them, put the three values in `.env` and export them before starting the app,
-because nothing in this project reads `.env` for you:
+`tracker/extract.py` is an offline extraction run, not part of the page:
 
 ```bash
-set -a; source .env; set +a      # or export the three variables yourself
-uv run streamlit run tracker/app.py
+set -a; source .env; set +a
+uv run python -m tracker.extract
 ```
 
-Tests:
+## Adding an observation
 
-```bash
-uv run pytest
+No code change is needed.
+
+1. Open each `source_url` from `products.csv`, store still set to Union Square, NYC.
+2. Record seven fields per SKU into `prices_manual.csv`, with `captured_at_local` as
+   `YYYY-MM-DDTHH:MM` in Asia/Taipei:
+
+   | Field | What it is |
+   |---|---|
+   | `price` | The clearly labelled purchase price. Not the largest number on the page, not a monthly financing figure, not a comparison value, not an open-box range |
+   | `regular_price` | The struck-through or comparison price, blank when there is no promotion |
+   | `savings` | The stated saving, blank when there is none |
+   | `availability` | `Add to cart`, `Unavailable` or `Sold Out` |
+   | `seller` | The "Sold by" text |
+   | `stock_hint` | The stock note as written, blank if none |
+   | `pickup_eta` | `today`, or a date like `2026-09-18`. `today` is a state, not the capture date |
+
+   If a field is not shown, leave it blank. Never guess.
+3. Reload the page. The loader is deliberately not cached, so it reflects the file.
+
+A row the schema refuses (unknown SKU, duplicate capture time, a seller other than
+Best Buy, a purchasable listing with no price, savings that do not reconcile) appears
+at the top of the page with its CSV line number and the database's own reason. It is
+left in the file untouched, and the rest of the data still loads.
+
+## Layout
+
+```
+tracker/
+  app.py          Streamlit. The only module that imports streamlit
+  store.py        SQLite schema, ingest, queries. The only module that knows storage
+  metrics.py      Pure functions over DataFrames. No streamlit, no path, no network
+  insights.py     Scope, deterministic change detection, scoring, reading order
+  summarise.py    Summary context, prose generation, grounding check
+  extract.py      Offline specification extraction, scored against the master
+  capture.py      Prompts for a capture session and appends it
+  bestbuy.py      Products API adapter. Not integrated and not live-tested
+data/
+  structured/
+    products.csv          Product master, verified by hand
+    prices_manual.csv     Append-only landing file, one row per SKU per capture
+  raw_specs/<sku>.txt     Verbatim page text, the input to extraction
+  extraction_review.csv   Extraction scored field by field against the master
+  summary.md              Stored dashboard summary
+tests/                    One file per module
 ```
 
-**278 tests pass** at the time of writing: store behaviour including every refusal
-path, the pure metric functions, the extraction gates against a stubbed client, and
-twenty-six end-to-end checks that drive the real Streamlit page against the real data
-files. No test reaches the network.
-
-## Updating the data
-
-Adding an observation is a five-minute loop and needs no code change.
-
-1. Open each product URL from `data/structured/products.csv`, with the store still
-   set to Union Square, NYC.
-2. Record seven fields per SKU: `price`, `regular_price`, `savings`, `availability`,
-   `seller`, `stock_hint`, `pickup_eta`. `pickup_eta` is `today` or a date such as
-   `2026-09-18`; `today` is a state, not the capture date, so same-day pickup on two
-   different days does not read as a change. `price` means the clearly labelled purchase price for that
-   SKU, that seller and that fulfilment state. It is not the largest number on the
-   page, not a monthly financing figure, not a comparison value, and not an open-box
-   range. If a field is not shown, leave it blank. Never guess.
-3. Append one row per SKU to `data/structured/prices_manual.csv`, with
-   `captured_at_local` in `YYYY-MM-DDTHH:MM` Asia/Taipei time.
-4. Reload the Streamlit page. The CSV loader is deliberately not wrapped in
-   `st.cache_data`, so a reload reflects the file as it now stands. Results a reader
-   asked a model for are held in session state until the selection changes.
-
-If a row is malformed or breaks one of the rules the SQL schema holds (unknown SKU,
-duplicate capture time, a seller other than Best Buy, a purchasable listing with no
-price, savings that do not reconcile with the two prices), it appears at the top of
-the page in an expanded panel with its **line number in the CSV and the database's
-own reason for refusing it**. The row is left in the file untouched. The rest of the
-data still loads.
-
-Why capture times are clustered around the Best Buy weekly-ad changeover and around a
-stated promotion expiry, rather than spaced evenly, is part of the written explanation.
-
-## Where things are
-
-| What | Where |
-|---|---|
-| The tracker | `tracker/app.py`, over `data/structured/products.csv` and `data/structured/prices_manual.csv` |
-| The trend chart | Section 1 of the app, first on the page. Data from `tracker/metrics.py:series_for` |
-| Source and update steps | `tracker/`, `tests/`, and the "Running it" and "Updating the data" sections above |
-| Offline extraction and its score | `tracker/extract.py`, `data/extraction_review.csv` and `data/extraction_review.qwen2.5-7b.csv`, one run per endpoint |
+Adding a column to either CSV needs no code change: the store carries columns the
+schema does not name, the sidebar grows a filter for any column the products disagree
+about, and the change detector watches it from its first change.
