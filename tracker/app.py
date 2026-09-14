@@ -43,7 +43,7 @@ from tracker.metrics import (
     strict_comparison,
     strict_time_points,
 )
-from tracker.store import build
+from tracker.store import RULE_FIELDS, build
 from tracker.summarise import (
     build_context,
     build_client,
@@ -103,11 +103,9 @@ FILTER_LABELS = {
 }
 
 
-#: The seven fields the equivalence rule checks, as the store's triggers
-#: enforce them. Named here so the page can describe what the rule did not
-#: look at without a second copy of the list going stale against the first.
-RULE_FIELDS = ("cpu", "ram_gb", "storage_gb", "screen_inch",
-               "operating_system", "device_type", "form_factor")
+#: Stored values that read as jargon on the page. The value itself stays as
+#: the schema names it; only the label a reader sees is translated.
+DISPLAY = {"strict": "matched pair"}
 
 #: Columns that say which product a row is rather than what it is like. Two
 #: different products differ on all of them by definition, so reporting it
@@ -285,25 +283,27 @@ def admits(frame: pd.DataFrame, column: str, kept: list[Any]) -> pd.Series:
     return mask
 
 
-def attribute_filter(column: str, label: str) -> None:
-    """One control for one column, or none at all.
+def attribute_filter(frame: pd.DataFrame, column: str,
+                     label: str) -> pd.DataFrame:
+    """One control for one column, or none at all, and what it leaves.
 
     Options come from the whole master rather than from what the other filters
-    have already left, and carry the count they would leave.
+    have already left, and carry the count they would leave. The narrowed frame
+    is returned rather than assigned to a module global, so the caller can see
+    where the selection is built up.
     """
-    global eligible
     if column not in data.products.columns:
-        return
+        return frame
     options = filter_options(data.products, column)
     if len(options) < 2:
-        return
+        return frame
     counts = option_counts(column, options)
     kept = st.multiselect(
         label, options=options, default=options, key=f"filter_{column}",
-        format_func=lambda v: f"{v}  ({counts.get(v, 0)})")
+        format_func=lambda v: f"{DISPLAY.get(v, v)}  ({counts.get(v, 0)})")
     if set(kept) != set(options):
         narrowed[label] = kept
-    eligible = eligible[admits(eligible, column, kept)]
+    return frame[admits(frame, column, kept)]
 
 
 with st.sidebar:
@@ -352,7 +352,7 @@ with st.sidebar:
     lead, rest = columns[:len(FILTER_ORDER)], columns[len(FILTER_ORDER):]
 
     for column in lead:
-        attribute_filter(column, filter_label(column))
+        eligible = attribute_filter(eligible, column, filter_label(column))
 
     # An expander closes on every rerun, so choosing something inside it made
     # the control vanish the moment it was used. It stays open while anything
@@ -368,7 +368,8 @@ with st.sidebar:
             st.caption("Every product on record shares these, so there is "
                        "nothing here to choose between yet.")
         for column in rest:
-            attribute_filter(column, filter_label(column))
+            eligible = attribute_filter(
+                eligible, column, filter_label(column))
 
     # Both kinds of control narrow, so they intersect. Choosing a brand and
     # then a product from another brand selects nothing, and the page says so
@@ -444,7 +445,7 @@ latest_rows = latest_per_sku(scoped)
 points = strict_time_points(scoped, selected)
 st.caption(f"Last observation {scoped['captured_at'].max():%Y-%m-%d %H:%M} · "
            f"{len(scoped)} snapshots · "
-           f"{points} capture time(s) covering the strict group")
+           f"{points} capture time(s) covering the matched pair")
 
 found = prefer(detect(scoped, selected), lead)
 
@@ -563,7 +564,7 @@ else:
         movements = [i for i in found if i.kind in CHANGE_KINDS]
         if movements:
             st.info(
-                f"No strict price changed across {points} capture times. "
+                f"Neither matched price changed across {points} capture times. "
                 f"{len(movements)} other movement"
                 f"{'' if len(movements) == 1 else 's'} were observed in the "
                 f"same window and are listed in section 2.")
@@ -608,12 +609,12 @@ else:
         st.caption(f"Selected {order}. No model was involved.")
 
     with st.expander(f"All {len(found)} findings, and how each was ranked"):
-        st.caption("priority = magnitude x recency x scope x rarity. It orders "
-                   "the findings and means nothing else; it is not statistical "
-                   "significance. The factors are shown so the order can be "
-                   "argued with rather than trusted.")
+        st.caption("priority_score = magnitude x recency x scope x rarity. "
+                   "It orders the findings and means nothing else. The factors "
+                   "are shown so the order can be argued with rather than "
+                   "trusted.")
         st.dataframe(pd.DataFrame([{
-            "priority": round(item.significance, 3),
+            "priority": round(item.priority_score, 3),
             "magnitude": round(item.facts.get("magnitude", 0.0), 2),
             "recency": round(item.facts.get("recency", 0.0), 2),
             "scope": round(item.facts.get("scope_weight", 0.0), 2),
@@ -717,7 +718,7 @@ st.dataframe(
     width="stretch", hide_index=True)
 
 # ----------------------------------------------------------- 5. comparison
-st.header("5. Strict group, matched-pair observation")
+st.header("5. Like-for-like comparison")
 
 if not comparison["comparable"]:
     st.info(f"Not comparable: {comparison['reason']}.")
@@ -754,7 +755,7 @@ st.caption("Every price on this page was read by hand from the listing linked "
 #: reference SKUs are muted, and saying it a third time here crowded four
 #: bullets behind four lines of prose they had already read.
 ROLE_SECTIONS = [
-    ("strict", "The equivalence pair, the only two in the price difference"),
+    ("strict", "Matched pair: the only two in the price difference"),
     ("reference", "Reference: context, each differing on more than one field"),
 ]
 

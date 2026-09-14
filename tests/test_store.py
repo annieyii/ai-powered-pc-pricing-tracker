@@ -2,6 +2,7 @@
 
 Fixtures never touch the real CSVs: every sample file is written under tmp_path.
 """
+import re
 import sqlite3
 
 import pandas as pd
@@ -10,6 +11,8 @@ import pytest
 from tracker.store import (
     Dataset,
     PRODUCT_FIELDS,
+    RULE_FIELDS,
+    SCHEMA,
     build,
     connect,
     ingest_prices,
@@ -311,3 +314,14 @@ def test_a_strict_product_that_states_no_rule_field_is_refused(tmp_path, column)
         build(path, PRICES_CSV)
     assert "equivalence rule" in str(caught.value)
 
+
+def test_rule_fields_matches_the_trigger_that_enforces_it():
+    """The triggers are SQL text, so nothing makes them agree with the tuple
+    the page imports. This is what does: rename a rule column in one place and
+    the other stops naming it."""
+    trigger = SCHEMA.split(
+        "CREATE TRIGGER strict_products_must_satisfy_the_equivalence_rule")[1]
+    trigger = trigger.split("END;")[0]
+    named = {word for word in re.findall(r"[a-z_]+", trigger)}
+    assert set(RULE_FIELDS) <= named
+    assert len(RULE_FIELDS) == trigger.count("IS NOT NEW.")

@@ -128,7 +128,7 @@ class Insight:
     subjects: tuple[str, ...]
     at: datetime | None
     facts: dict[str, Any] = field(default_factory=dict)
-    significance: float = 0.0
+    priority_score: float = 0.0
     sentence: str = ""
 
 
@@ -159,7 +159,7 @@ RARITY = {
     "field_shift": 0.65,
     "promotion_ending": 0.60,
     "promotion_active": 0.45,
-    "stock_scarcity": 0.35,
+    "stock_note": 0.35,
     "parity_held": 0.30,
     "no_change": 0.20,
 }
@@ -249,7 +249,7 @@ def score(kind: str, roles: tuple[str, ...], at: Any = None,
     product = 1.0
     for value in parts.values():
         product *= value
-    parts["significance"] = round(min(1.0, max(0.0, product)), 6)
+    parts["priority_score"] = round(min(1.0, max(0.0, product)), 6)
     return parts
 
 
@@ -305,7 +305,7 @@ def _render_promotion_ending(f: dict[str, Any]) -> str:
             f"read at {f['at']}.")
 
 
-def _render_stock_scarcity(f: dict[str, Any]) -> str:
+def _render_stock_note(f: dict[str, Any]) -> str:
     return (f"The page for {f['name']} carried the stock note "
             f"\"{f['stock_hint']}\" at {f['at']}.")
 
@@ -329,7 +329,7 @@ def _render_availability_lost(f: dict[str, Any]) -> str:
 
 
 def _render_no_change(f: dict[str, Any]) -> str:
-    return (f"No strict price changed across the {_times(f['capture_times'])} "
+    return (f"Neither matched price changed across the {_times(f['capture_times'])} "
             f"covering {f['names']}, from {f['first_at']} to {f['at']}.")
 
 
@@ -341,7 +341,7 @@ RENDERERS: dict[str, Callable[[dict[str, Any]], str]] = {
     "gap_narrowed": _render_gap_narrowed,
     "promotion_active": _render_promotion_active,
     "promotion_ending": _render_promotion_ending,
-    "stock_scarcity": _render_stock_scarcity,
+    "stock_note": _render_stock_note,
     "field_shift": _render_field_shift,
     "availability_lost": _render_availability_lost,
     "availability_regained": _render_availability_regained,
@@ -470,7 +470,7 @@ def detect(prices: pd.DataFrame, products: pd.DataFrame,
         full.update(parts)
         return Insight(kind=kind, subjects=subjects,
                        at=None if at is None else pd.Timestamp(at),
-                       facts=full, significance=parts["significance"],
+                       facts=full, priority_score=parts["priority_score"],
                        sentence=render(kind, full))
 
     found: list[Insight] = []
@@ -552,20 +552,19 @@ def detect(prices: pd.DataFrame, products: pd.DataFrame,
                                {"sku": sku, "name": name_of(sku),
                                 "ends": ends, "at": _stamp(at)}))
 
-        # Named for scarcity because every value this column has held is a
-        # "Act fast - Only 1 left" badge. The test is only non-empty, so
-        # "plenty available" would fire too. The sentence quotes, never
-        # characterises, which bounds that but does not remove it.
+        # Named for the note, not for scarcity: the test is only that the
+        # column is non-empty, so "plenty available" would fire too. The
+        # sentence quotes the badge and never characterises it.
         hint = _value(last, "stock_hint")
         if hint:
-            found.append(build("stock_scarcity", (sku,), at,
+            found.append(build("stock_note", (sku,), at,
                                {"sku": sku, "name": name_of(sku),
                                 "stock_hint": str(hint), "at": _stamp(at)}))
 
     found.extend(_pair_insights(rows, strict, name_of, build))
     found.extend(_no_change(rows, strict, name_of, build, strict_changed))
 
-    return sorted(found, key=lambda i: (-i.significance, i.kind, i.subjects))
+    return sorted(found, key=lambda i: (-i.priority_score, i.kind, i.subjects))
 
 
 def _shared_times(rows: pd.DataFrame, strict: list[str]) -> list[dict[str, Any]]:
@@ -652,7 +651,7 @@ def _no_change(rows, strict, name_of, build, strict_changed) -> list[Insight]:
 SELECTION_PROMPT = (
     "You choose which already written findings a product manager reads first. "
     "The next message is a JSON list of candidates, each with an index, a "
-    "kind, a significance score and the sentence itself.\n"
+    "kind, a priority score and the sentence itself.\n"
     "Rules you must follow:\n"
     "1. Return a single JSON object with the keys \"indices\" and \"framing\".\n"
     "2. \"indices\" is a list of at most {k} integers, each one an index that "
@@ -696,7 +695,7 @@ KIND_GROUPS: dict[str, tuple[str, ...]] = {
                        "gap_widened", "gap_narrowed"),
     "Availability and stock": ("availability_lost", "availability_regained",
                                "field_shift",
-                               "stock_scarcity"),
+                               "stock_note"),
     "Promotions": ("promotion_active", "promotion_ending"),
     "Like-for-like position": ("parity_held", "no_change"),
 }
@@ -718,11 +717,11 @@ def prefer(insights: list[Insight], groups: Sequence[str]) -> list[Insight]:
         return list(insights)
     wanted = {kind for group in chosen for kind in KIND_GROUPS[group]}
     return sorted(insights,
-                  key=lambda i: (i.kind not in wanted, -i.significance, i.kind))
+                  key=lambda i: (i.kind not in wanted, -i.priority_score, i.kind))
 
 
 def select_by_score(insights: list[Insight], k: int = 3) -> Selection:
-    """The top k by significance. No client, no endpoint, no network.
+    """The top k by priority. No client, no endpoint, no network.
 
     This is the floor the page always stands on, and the exact result any model
     failure lands back on, so it is written first and the model path is defined
@@ -735,7 +734,7 @@ def select_by_score(insights: list[Insight], k: int = 3) -> Selection:
 def _candidates(insights: list[Insight]) -> list[dict[str, Any]]:
     """The only thing the model is shown: index, kind, score, sentence."""
     return [{"index": i, "kind": insight.kind,
-             "significance": insight.significance, "sentence": insight.sentence}
+             "priority_score": insight.priority_score, "sentence": insight.sentence}
             for i, insight in enumerate(insights)]
 
 

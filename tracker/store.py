@@ -118,6 +118,14 @@ BEGIN
 END;
 """
 
+#: The seven columns the equivalence rule checks, in the order the triggers
+#: above name them. The triggers are SQL text and cannot read this tuple, so
+#: `test_store.py` asserts every name here appears in that text; anything the
+#: page wants to say about the rule imports this rather than keeping a second
+#: copy that can go stale.
+RULE_FIELDS = ("cpu", "ram_gb", "storage_gb", "screen_inch",
+               "operating_system", "device_type", "form_factor")
+
 PRODUCT_FIELDS = [
     "sku", "role", "brand", "model_name", "model_number", "cpu",
     "ram_gb", "storage_gb", "screen_inch", "display_type", "brightness_nits",

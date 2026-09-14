@@ -190,10 +190,10 @@ def _price_line(row: Mapping[str, Any]) -> str:
 
 def _pair_line(comparison: Mapping[str, Any]) -> str:
     if not comparison["comparable"]:
-        return f"The strict pair is not comparable: {comparison['reason']}."
+        return f"The matched pair is not comparable: {comparison['reason']}."
     if comparison["parity"]:
         return (f"Matched-pair observation at {comparison['captured_at']}: both "
-                f"strict products were listed at the same price.")
+                f"matched products were listed at the same price.")
     return (f"Matched-pair observation at {comparison['captured_at']}: "
             f"{comparison['cheaper']} was listed ${comparison['delta']:,.2f} "
             f"below {comparison['dearer']}. The difference is not attributed "
@@ -203,13 +203,13 @@ def _pair_line(comparison: Mapping[str, Any]) -> str:
 def _movement_line(context: Mapping[str, Any]) -> str:
     points = context["strict_capture_times"]
     if context["any_strict_price_changed"]:
-        return (f"At least one strict price changed across the {points} capture "
-                f"times covering the strict group.")
+        return (f"At least one matched price changed across the {points} capture "
+                f"times covering the pair.")
     if points < 2:
-        return ("Only one capture time covers the strict group, so no movement "
+        return ("Only one capture time covers the matched pair, so no movement "
                 "can be reported yet.")
-    return (f"No strict price changed across the {points} capture times "
-            f"covering the strict group.")
+    return (f"Neither matched price changed across the {points} capture times "
+            f"covering the pair.")
 
 
 def template_summary(context: Mapping[str, Any]) -> str:

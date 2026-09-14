@@ -191,7 +191,7 @@ def test_the_template_summary_claims_no_movement_that_did_not_happen(
 
 
 def test_the_template_summary_reports_a_price_that_did_move(context):
-    assert "At least one strict price changed" in template_summary(context)
+    assert "At least one matched price changed" in template_summary(context)
 
 
 def test_the_template_summary_is_itself_fully_grounded(context):

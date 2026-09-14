@@ -242,17 +242,17 @@ def test_stated_end_date_reads_only_a_real_date(note, expected):
 
 # --- stock and availability ---------------------------------------------
 
-def test_stock_scarcity_fires_on_a_non_empty_hint():
+def test_stock_note_fires_on_a_non_empty_hint():
     hint = "Act fast - Only 1 left at your store!"
     found = detect(prices([snap(LENOVO, T1, 1299.99, stock_hint=hint)]),
                    BOTH_STRICT)
-    assert only(found, "stock_scarcity").facts["stock_hint"] == hint
+    assert only(found, "stock_note").facts["stock_hint"] == hint
 
 
-def test_stock_scarcity_is_silent_on_a_blank_hint():
+def test_stock_note_is_silent_on_a_blank_hint():
     found = detect(prices([snap(LENOVO, T1, 1299.99, stock_hint="  ")]),
                    BOTH_STRICT)
-    assert "stock_scarcity" not in kinds(found)
+    assert "stock_note" not in kinds(found)
 
 
 def test_a_changed_stock_note_is_reported_as_a_movement():
@@ -375,7 +375,7 @@ def test_no_change_fires_alongside_other_findings():
                            snap(LENOVO, T3, 1299.99, stock_hint=hint),
                            snap(HP, T3, 1299.99)]), BOTH_STRICT)
     assert "no_change" in kinds(found)
-    assert "stock_scarcity" in kinds(found)
+    assert "stock_note" in kinds(found)
 
 
 def test_a_reference_product_moving_does_not_silence_no_change():
@@ -390,8 +390,8 @@ def test_a_reference_product_moving_does_not_silence_no_change():
 
 def test_parity_broken_outranks_parity_held_at_equal_factors():
     strict_at_one_time = {"roles": ("strict", "strict")}
-    broken = score("parity_broken", **strict_at_one_time)["significance"]
-    held = score("parity_held", **strict_at_one_time)["significance"]
+    broken = score("parity_broken", **strict_at_one_time)["priority_score"]
+    held = score("parity_held", **strict_at_one_time)["priority_score"]
     assert broken > held
 
 
@@ -403,7 +403,7 @@ def test_a_strict_product_outranks_a_reference_one_at_equal_magnitude():
     moves = {i.subjects[0]: i for i in found if i.kind == "price_change"}
     assert moves[LENOVO].facts["change"] == moves[DELL].facts["change"]
     assert moves[LENOVO].facts["magnitude"] == moves[DELL].facts["magnitude"]
-    assert moves[LENOVO].significance > moves[DELL].significance
+    assert moves[LENOVO].priority_score > moves[DELL].priority_score
 
 
 def test_a_change_outranks_a_non_change_of_the_same_scope():
@@ -411,8 +411,8 @@ def test_a_change_outranks_a_non_change_of_the_same_scope():
     found = detect(prices([snap(LENOVO, T1, 1299.99),
                            snap(LENOVO, T3, 1199.99, stock_hint=hint)]),
                    BOTH_STRICT)
-    assert (only(found, "price_change").significance
-            > only(found, "stock_scarcity").significance)
+    assert (only(found, "price_change").priority_score
+            > only(found, "stock_note").priority_score)
 
 
 def test_a_later_observation_outranks_an_earlier_one():
@@ -422,10 +422,10 @@ def test_a_later_observation_outranks_an_earlier_one():
     moves = sorted((i for i in found if i.kind == "price_change"),
                    key=lambda i: i.at)
     assert moves[0].facts["recency"] < moves[1].facts["recency"]
-    assert moves[0].significance < moves[1].significance
+    assert moves[0].priority_score < moves[1].priority_score
 
 
-def test_detection_is_ordered_by_significance_descending():
+def test_detection_is_ordered_by_priority_score_descending():
     hint = "Act fast - Only 1 left at your store!"
     found = detect(prices([snap(LENOVO, T1, 1299.99), snap(HP, T1, 1299.99),
                            snap(DELL, T1, 1299.99, regular_price=1499.99),
@@ -434,7 +434,7 @@ def test_detection_is_ordered_by_significance_descending():
                            snap(DELL, T3, 999.99, regular_price=1499.99)]),
                    BOTH_STRICT)
     assert len(found) > 3
-    scores = [insight.significance for insight in found]
+    scores = [insight.priority_score for insight in found]
     assert scores == sorted(scores, reverse=True)
 
 
@@ -444,16 +444,16 @@ def test_the_four_factors_are_on_the_facts_and_multiply_to_the_score():
     facts = only(found, "price_change").facts
     product = (facts["magnitude"] * facts["recency"]
                * facts["scope_weight"] * facts["rarity"])
-    assert facts["significance"] == pytest.approx(product, abs=1e-6)
+    assert facts["priority_score"] == pytest.approx(product, abs=1e-6)
 
 
-def test_every_significance_is_inside_zero_to_one():
+def test_every_priority_score_is_inside_zero_to_one():
     found = detect(prices([snap(LENOVO, T1, 1299.99), snap(HP, T1, 1299.99),
                            snap(DELL, T1, 99.99, regular_price=9999.99),
                            snap(LENOVO, T3, 99.99), snap(HP, T3, 1299.99)]),
                    BOTH_STRICT)
     assert found
-    assert all(0.0 <= insight.significance <= 1.0 for insight in found)
+    assert all(0.0 <= insight.priority_score <= 1.0 for insight in found)
 
 
 def test_magnitude_falls_back_to_a_base_for_a_kind_with_no_figure():
@@ -649,7 +649,7 @@ def test_the_model_is_shown_indices_kinds_scores_and_sentences_only():
     select_with_model(found, client, "some-model")
     payload = client.calls[0]["messages"][-1]["content"]
     assert set(json.loads(payload)[0]) == {
-        "index", "kind", "significance", "sentence"}
+        "index", "kind", "priority_score", "sentence"}
 
 
 def test_an_out_of_range_index_falls_back_to_score_ordering():
@@ -800,8 +800,8 @@ def test_score_still_breaks_ties_inside_a_group():
     led = prefer(found, ["Availability and stock"])
     wanted = set(KIND_GROUPS["Availability and stock"])
     front = [i for i in led if i.kind in wanted]
-    assert [i.significance for i in front] == sorted(
-        (i.significance for i in front), reverse=True)
+    assert [i.priority_score for i in front] == sorted(
+        (i.priority_score for i in front), reverse=True)
 
 
 def test_an_unknown_group_name_is_ignored_rather_than_obeyed():
@@ -812,9 +812,9 @@ def test_an_unknown_group_name_is_ignored_rather_than_obeyed():
 def test_a_small_price_move_ranks_below_a_stock_note():
     """Pins the crossover the docstring names, because the earlier docstring
     claimed a state could never outrank a move and the arithmetic disagreed."""
-    note = score("stock_scarcity", ("strict",))["significance"]
+    note = score("stock_note", ("strict",))["priority_score"]
     small = score("price_change", ("strict",), change=1.00,
-                  reference_price=1299.99)["significance"]
+                  reference_price=1299.99)["priority_score"]
     large = score("price_change", ("strict",), change=250.00,
-                  reference_price=1299.99)["significance"]
+                  reference_price=1299.99)["priority_score"]
     assert small < note < large
