@@ -48,7 +48,13 @@ def strict_comparison(prices: pd.DataFrame, products: pd.DataFrame) -> dict[str,
                "rows": [], "delta": None, "cheaper_sku": None,
                "dearer_sku": None, "parity": None}
 
-    if prices.empty or len(skus) < 2:
+    if len(skus) < 2:
+        # Under a filter this is the ordinary case, not a missing-data case,
+        # and the two read very differently to someone looking at the page.
+        return {**nothing,
+                "reason": f"the selection holds {len(skus)} of the strict "
+                          f"products, and a pair needs two"}
+    if prices.empty:
         return {**nothing, "reason": "no snapshots recorded yet"}
 
     priced = prices[prices["sku"].isin(skus) & prices["price"].notna()]

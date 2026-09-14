@@ -59,12 +59,6 @@ ROOT = Path(__file__).resolve().parents[1]
 PRODUCTS_CSV = ROOT / "data" / "structured" / "products.csv"
 PRICES_CSV = ROOT / "data" / "structured" / "prices_manual.csv"
 
-# Two identical series must stay separable without moving either line off its
-# real value. A matched pair at parity overlaps exactly, which is the normal
-# case here rather than the edge case, so the trace drawn second is dashed,
-# hollow and smaller: the one underneath shows through the gaps and through the
-# marker centres instead of disappearing beneath it. Colours are set explicitly
-# because the inherited second colour was too pale to find on a white ground.
 def usd(text: str) -> str:
     """Escape dollar signs so Streamlit does not read a price pair as LaTeX.
 
@@ -118,6 +112,12 @@ def filter_label(column: str) -> str:
     return FILTER_LABELS.get(column, column.replace("_", " ").capitalize())
 
 
+# Two identical series must stay separable without moving either line off its
+# real value. A matched pair at parity overlaps exactly, which is the normal
+# case here rather than the edge case, so the trace drawn second is dashed,
+# hollow and smaller: the one underneath shows through the gaps and through the
+# marker centres instead of disappearing beneath it. Colours are set explicitly
+# because the inherited second colour was too pale to find on a white ground.
 COLOURS = ["#1f4e9c", "#d1495b", "#2a9d8f", "#6c757d"]
 
 #: Reference SKUs are context, not comparison. They are on the chart because a
@@ -228,21 +228,47 @@ def attribute_filter(column: str, label: str) -> None:
 with st.sidebar:
     st.header("Selection")
 
-    if st.button("Reset filters", width="stretch"):
-        for stale in [k for k in st.session_state if k.startswith("filter_")]:
-            del st.session_state[stale]
-        st.session_state.pop("products", None)
-        # Not `lead_with`. That is a reading preference, not a filter: clearing
-        # it here would throw away what the reader asked to see first every
-        # time they widened the data they were looking at.
-        st.rerun()
-
     # The window comes first: this is a tracker, so when is the outer question
-    # and everything else narrows inside it.
+    # and everything else narrows inside it. Its bounds are computed above the
+    # reset button because the reset writes them back.
     earliest = data.prices["captured_at"].min().date()
     latest = data.prices["captured_at"].max().date()
+
+    def reset_filters() -> None:
+        """Put every control that narrows the page back to its full default.
+
+        Writes the defaults rather than deleting the keys. Deleting clears the
+        server's copy, and the page below does reset, but the control itself
+        goes on showing the selection the reader made: `default=` is read on a
+        widget's first render only, so nothing is sent that would replace what
+        the browser still holds. The next interaction then sends that stale
+        selection back and the page narrows again. Assigning is a change the
+        widget receives.
+
+        A callback, not an `if st.button(...)` body, so the write lands after
+        the browser's values are applied and before the page reads them.
+
+        Not `lead_with`. That is a reading preference, not a filter: clearing
+        it here would throw away what the reader asked to see first every time
+        they widened the data they were looking at.
+        """
+        for column in filterable_columns(data.products):
+            key = f"filter_{column}"
+            if key in st.session_state:
+                st.session_state[key] = sorted(
+                    data.products[column].dropna().unique().tolist())
+        st.session_state["products"] = list(data.products["sku"])
+        # Read from `data` rather than closing over `earliest`/`latest`. A
+        # callback runs on the next script run, by which time this module's
+        # globals hold whatever the previous run left in them, and a name
+        # reused later in the file would arrive here as the wrong type.
+        st.session_state["window"] = (data.prices["captured_at"].min().date(),
+                                      data.prices["captured_at"].max().date())
+
+    st.button("Reset filters", width="stretch", on_click=reset_filters)
+
     window = st.date_input("Capture dates", value=(earliest, latest),
-                           min_value=earliest, max_value=latest)
+                           min_value=earliest, max_value=latest, key="window")
 
     every_sku = list(data.products["sku"])
     # Both HP SKUs carry the same brand and model name, so the CPU is what
@@ -306,7 +332,12 @@ if (isinstance(window, (list, tuple)) and len(window) == 2
 scope = Scope(skus=None if set(picked) == set(every_sku) else tuple(picked),
               start=start, end=end)
 scoped = scope.apply(data.prices)
-view = replace(data, prices=scoped)
+# The product set the page is showing, not the master it was chosen from. A
+# summary written from the master under an active filter lists the excluded
+# products with null prices, which reads as missing data sitting beside a
+# correctly filtered chart: both halves true, the page wrong.
+selected = data.products[data.products["sku"].isin(picked)]
+view = replace(data, prices=scoped, products=selected)
 filtered = scope.key() != Scope().key()
 
 # A result computed for one scope must not survive a change of scope.
@@ -335,7 +366,7 @@ if filtered:
     st.info(f"A selection is active: {len(scoped)} of {len(data.prices)} "
             f"observations are in view, and every section below reflects it.")
 
-latest = latest_per_sku(scoped)
+latest_rows = latest_per_sku(scoped)
 points = strict_time_points(scoped, data.products)
 st.caption(f"Last observation {scoped['captured_at'].max():%Y-%m-%d %H:%M} · "
            f"{len(scoped)} snapshots · "
@@ -390,10 +421,12 @@ st.divider()
 
 # --------------------------------------------------------------- 1. trend
 st.header("1. Price over time")
-st.caption("Every tracked product is plotted. The two that satisfy the "
-           "equivalence rule are drawn in full; the two reference SKUs are "
-           "muted, because each differs from the pair on more than one field "
-           "and neither enters the price-difference metric.")
+# Counts are deliberately absent. The sidebar changes them, and a caption that
+# states "the two reference SKUs" is wrong the moment a filter is used.
+st.caption("Every product in the selection is plotted. Those that satisfy the "
+           "equivalence rule are drawn in full; reference SKUs are muted, "
+           "because each differs from the pair on more than one field and none "
+           "enters the price-difference metric.")
 
 strict = data.products[data.products["role"] == "strict"]
 # Strict first, so the pair takes the strong colours and sits on top of the
@@ -492,9 +525,13 @@ else:
     led = [g for g in lead if g in KIND_GROUPS]
     order = ("by score" if len(led) in (0, len(KIND_GROUPS))
              else f"by score, with {' and '.join(led)} read first")
-    st.caption("Selected by the language model from the scored candidates."
-               if ranking.source == "model"
-               else f"Selected {order}. No model was involved.")
+    if ranking.source == "model":
+        st.caption("Selected by the language model from the scored candidates.")
+    elif ranking.source == "fallback":
+        st.caption(f"The model was asked and did not answer usefully, so these "
+                   f"were selected {order}. Nothing it returned is on screen.")
+    else:
+        st.caption(f"Selected {order}. No model was involved.")
 
     with st.expander(f"All {len(found)} findings, and how each was ranked"):
         st.caption("priority = magnitude x recency x scope x rarity. It orders "
@@ -519,7 +556,7 @@ st.header("3. Observation summary")
 # a click is reflected in the same run. A container reserves the space.
 summary_area = st.container()
 
-context = build_context(view, data.products)
+context = build_context(view, view.products)
 stored = read_stored_summary()
 if st.button("Regenerate with the language model", disabled=settings is None):
     with st.spinner("Asking the model, then looking up every figure it returns"):
@@ -586,22 +623,21 @@ with summary_area:
                    "formatting. No language model was called, and none is "
                    "needed to render this page.")
 
-# ------------------------------------------------------------ 3. snapshot
+# ------------------------------------------------------------ 4. snapshot
 st.header("4. Latest observation per product")
 
 # Left join so a selected product with no usable snapshot stays visible instead
 # of disappearing from the comparison. Joining from the whole master instead
 # would put every unselected product back on the page as a row of blanks, which
 # reads as missing data rather than as an excluded product.
-table = data.products[data.products["sku"].isin(picked)].merge(
-    latest, on="sku", how="left")
+table = selected.merge(latest_rows, on="sku", how="left")
 st.dataframe(
     table[["role", "brand", "model_name", "cpu", "form_factor", "display_type",
            "brightness_nits", "price", "regular_price", "savings",
            "availability", "seller", "captured_at"]],
     width="stretch", hide_index=True)
 
-# ----------------------------------------------------------- 4. comparison
+# ----------------------------------------------------------- 5. comparison
 st.header("5. Strict group — matched-pair observation")
 
 if not comparison["comparable"]:
@@ -624,11 +660,11 @@ else:
         "observation at one moment; the difference is not attributed to any "
         "single attribute."))
 
-# ------------------------------------------------------------ 5. reference
+# ------------------------------------------------------------ 6. reference
 st.header("6. Reference products")
-st.caption("Excluded from the chart and the comparison above. Each differs "
-           "from the strict pair on more than one field, so no difference is "
-           "attributed to any single attribute.")
+st.caption("Muted on the chart and excluded from the comparison above. Each "
+           "differs from the strict pair on more than one field, so no "
+           "difference is attributed to any single attribute.")
 
 reference = table[table["role"] == "reference"]
 for product in reference.itertuples():
@@ -639,7 +675,8 @@ for product in reference.itertuples():
                 f"${product.regular_price:,.2f}")
     st.write(usd(f"- **{product.brand} {product.model_name}** — {price}{note} · "
                  f"{product.cpu} · {product.form_factor} · "
-                 f"{product.display_type} · {product.availability}"))
+                 f"{product.display_type} · {product.availability} · "
+                 f"[listing]({product.source_url})"))
 
 st.divider()
 st.caption(usd(

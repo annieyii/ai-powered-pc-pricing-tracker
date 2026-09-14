@@ -4,9 +4,9 @@ Guards the delivery path the manual steps used to cover: the app must load,
 plot the strict group, keep every product visible in the table, and produce an
 observation summary with no endpoint configured and no network available.
 """
-from pathlib import Path
-
 import json
+from datetime import date
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -132,12 +132,26 @@ def test_an_empty_selection_names_the_filters_that_emptied_it():
 
 
 def test_reset_puts_every_filter_back():
-    """The escape hatch. Reversing a dozen controls by hand is not a fix."""
+    """The escape hatch. Reversing a dozen controls by hand is not a fix.
+
+    The banner disappearing is not enough to assert on: a page that raised on
+    the way to drawing it has no banner either, and a reset that crashes the
+    session is worse than one that does nothing. So this checks the run
+    survived and the controls themselves are back, not just what is under them.
+    """
     app = run_app().sidebar.multiselect(key="filter_brand").set_value(
         ["Lenovo"]).run()
     assert any("A selection is active" in info.value for info in app.info)
+
     app = app.sidebar.button[0].click().run()
+
+    assert not app.exception, app.exception
     assert not any("A selection is active" in info.value for info in app.info)
+    assert set(app.sidebar.multiselect(key="filter_brand").value) == {
+        "Dell", "HP", "Lenovo"}
+    assert len(app.sidebar.multiselect(key="products").value) == 4
+    window = app.sidebar.date_input(key="window").value
+    assert tuple(window) == (date(2026, 9, 12), date(2026, 9, 14))
 
 
 def test_an_attribute_filter_narrows_the_page_like_a_product_filter():
