@@ -13,7 +13,7 @@ Requires [uv](https://docs.astral.sh/uv/) and Python 3.10 or newer.
 ```bash
 uv sync
 uv run streamlit run tracker/app.py     # the dashboard
-uv run pytest                           # 281 tests, none reaching the network
+uv run pytest                           # 294 tests, none reaching the network
 ```
 
 That is the whole setup: no database to create, no environment variable, no API key. Every section renders deterministically without one.

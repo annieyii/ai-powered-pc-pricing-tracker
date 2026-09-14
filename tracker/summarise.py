@@ -41,6 +41,7 @@ import pandas as pd
 # The endpoint configuration and the grounding rule are extraction's, reused
 # rather than restated. A second copy of either would be a second thing to keep
 # true.
+from tracker.capture import CAPTURE_ZONE
 from tracker.extract import (
     PRODUCTS_CSV,
     ROOT,
@@ -389,8 +390,12 @@ def write_stored_summary(prose: str, model: str, context: Mapping[str, Any],
     Only ever called with output that passed ``verify_grounded``.
     """
     path = Path(path or SUMMARY_MD)
+    # The page states every time on it as Asia/Taipei, and this one is
+    # rendered next to them. datetime.now() would have stamped it in whatever
+    # zone the machine that pressed Save happened to be in.
     header = HEADER.format(model=model,
-                           generated=(now or datetime.now()).strftime(TIMESTAMP_FORMAT),
+                           generated=(now or datetime.now(CAPTURE_ZONE))
+                                     .strftime(TIMESTAMP_FORMAT),
                            last_capture=context.get("last_capture") or "none")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(f"{header}\n\n{prose.strip()}\n", encoding="utf-8")

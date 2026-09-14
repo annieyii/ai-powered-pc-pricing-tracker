@@ -315,3 +315,12 @@ def test_two_endpoints_write_two_review_files(tmp_path):
     assert first.name == "extraction_review.gpt-4o-mini.csv"
     # A colon is legal in a model name and unwelcome in a filename.
     assert second.name == "extraction_review.qwen2.5-7b.csv"
+
+
+def test_an_unexpected_key_fails_at_the_boundary():
+    """pydantic drops keys it was not expecting unless told not to, so a reply
+    carrying an invented field parsed cleanly and the invention was never
+    seen. The module docstring calls the schema the first of three gates."""
+    with pytest.raises(ValidationError):
+        ExtractedSpec.model_validate({**GOOD_SPEC, "warranty_years": 3})
+

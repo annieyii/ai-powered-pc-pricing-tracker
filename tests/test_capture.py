@@ -4,6 +4,8 @@ from datetime import datetime
 import pandas as pd
 import pytest
 
+import tracker.capture as capture
+
 from tracker.capture import (
     SKIP,
     already_recorded,
@@ -165,3 +167,23 @@ def test_a_column_the_helper_cannot_fill_is_left_blank(prices, tmp_path):
     frame = pd.read_csv(wide, dtype=str, keep_default_na=False)
     assert frame.loc[0, "operator"] == ""
     assert frame.loc[0, "note"] == "kept"
+
+
+def test_the_capture_time_is_taipei_whatever_the_machine_is_set_to(monkeypatch):
+    """`datetime.now()` with no zone stamps whatever the operator's machine is
+    set to, under a banner that says Asia/Taipei. The strict comparison pairs
+    snapshots by exact timestamp, so the zone decides what compares with what,
+    and the argument is what this asserts because the value alone cannot tell
+    a correct stamp from a machine that happens to be in the right zone."""
+    asked = []
+
+    class Clock:
+        @staticmethod
+        def now(tz=None):
+            asked.append(tz)
+            return datetime(2026, 9, 14, 21, 37, tzinfo=tz)
+
+    monkeypatch.setattr(capture, "datetime", Clock)
+    assert capture.session_timestamp() == "2026-09-14T21:37"
+    assert asked == [capture.CAPTURE_ZONE]
+
