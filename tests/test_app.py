@@ -5,7 +5,6 @@ plot the strict group, keep every product visible in the table, and produce an
 observation summary with no endpoint configured and no network available.
 """
 import json
-from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -150,8 +149,12 @@ def test_reset_puts_every_filter_back():
     assert set(app.sidebar.multiselect(key="filter_brand").value) == {
         "Dell", "HP", "Lenovo"}
     assert len(app.sidebar.multiselect(key="products").value) == 4
-    window = app.sidebar.date_input(key="window").value
-    assert tuple(window) == (date(2026, 9, 12), date(2026, 9, 14))
+    # Read off the data, not written down. Appending a capture is the
+    # documented way to use this project, and a date pinned here would turn
+    # that ordinary act into a red build.
+    stamps = pd.to_datetime(pd.read_csv(PRICES_CSV)["captured_at_local"])
+    assert tuple(app.sidebar.date_input(key="window").value) == (
+        stamps.min().date(), stamps.max().date())
 
 
 def test_an_attribute_filter_narrows_the_page_like_a_product_filter():
