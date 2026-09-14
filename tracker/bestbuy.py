@@ -1,9 +1,10 @@
 """Best Buy Products API adapter: the seam manual capture would be replaced by.
 
 Nothing in the app imports this module and no test reaches the network. It
-exists so that swapping manual capture for an authorised feed is a matter of
-credentials rather than design, and so the shape of that swap can be read
-rather than promised.
+exists so that the shape of that swap can be read rather than promised: an
+authorised feed can replace manual capture without redesigning the analytics
+pipeline. Actually integrating one depends on permitted access and on verified
+field mappings, not on credentials alone.
 
 **It is not integrated and not live-tested.** No key was available, so the
 mapping below was written from the published attribute documentation and is
@@ -19,12 +20,15 @@ is the system of record and its git diff is the audit trail. An automated
 capture that wrote past it would be a second, invisible source of truth. So
 this appends the columns a human would have typed.
 
-**It does not yet fill all of them.** `pickup_eta` was added to the landing
-file mid-window and comes from the store-availability call this module builds
-a URL for but never makes. A blank in that column is not a missing value to
-the change detector, it is a change: every SKU would report its pickup date
-moving to nothing on the first automated capture. `append_rows` refuses rather
-than writing a row the file has outgrown.
+**It does not yet fill all of them, and does not pretend to.** Two columns
+have no verified mapping. `pickup_eta` comes from the store-availability call
+this module builds a URL for but never makes. `seller` records whether the
+listing is first-party, and no documented product attribute carries that; the
+manual process read "Sold by Best Buy" off the page. A blank in either column
+is not a missing value to the change detector, it is a change: every SKU would
+report its pickup date moving to nothing on the first automated capture. So
+neither is supplied, and `append_rows` refuses the row. Fail closed is the
+whole point: this module never invents a value the API did not give it.
 
 Usage, once a key exists:
 
@@ -138,7 +142,11 @@ def _money(value: Any) -> float | None:
 
 
 def row_from(payload: Mapping[str, Any], captured_at: datetime) -> dict[str, Any]:
-    """One payload, mapped to the nine columns a human would have typed.
+    """One payload, mapped to the columns the API actually settles.
+
+    Deliberately short of a full row: `seller` and `pickup_eta` are absent
+    because nothing in the product response verifies them, and `append_rows`
+    refuses a row missing a column the landing file records.
 
     Pure, so the mapping is testable without a key. The caller supplies the
     capture time: the API's own `priceUpdateDate` says when the price last
@@ -166,16 +174,18 @@ def row_from(payload: Mapping[str, Any], captured_at: datetime) -> dict[str, Any
         "regular_price": _money(payload.get("regularPrice")) if on_sale else None,
         "savings": _money(payload.get("dollarSavings")) if on_sale else None,
         "availability": ORDERABLE[orderable],
-        # TODO: unfilled. The Products API carries no pickup date; it comes
-        # from the store-availability call `product_url` builds and nothing
-        # calls. Until that exists `append_rows` refuses the row rather than
-        # blanking the column.
+        # TODO: `pickup_eta` unfilled. The Products API carries no pickup
+        # date; it comes from the store-availability call `product_url` builds
+        # and nothing calls.
         #
-        # TODO: the Products API exposes no verified first-party/marketplace
-        # flag, and the store's CHECK constraint admits 'Best Buy' only. The
-        # manual process read "Sold by Best Buy" off the page. Confirm which
-        # attribute carries this before trusting an automated row.
-        "seller": "Best Buy",
+        # TODO: `seller` unfilled. No documented product attribute verifies
+        # first-party against marketplace, and the store's CHECK admits
+        # 'Best Buy' only. This used to be hard-coded to 'Best Buy' one line
+        # under a comment saying the source was unconfirmed, which is the
+        # guess this project refuses everywhere else. Confirm the attribute
+        # before an automated row claims it.
+        #
+        # Both are omitted rather than blanked, so `append_rows` refuses.
         "stock_hint": "",
         "note": "; ".join(note),
     }

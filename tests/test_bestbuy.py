@@ -31,6 +31,11 @@ HEADER = ("sku,captured_at_local,price,regular_price,savings,"
 
 AT = datetime(2026, 9, 14, 21, 5)
 
+#: What a person still has to supply. The adapter refuses to invent either of
+#: these, so a test that exercises the schema join has to stand in for the
+#: operator rather than pretend the API settled it.
+BY_HAND = {"seller": "Best Buy"}
+
 ON_SALE = {
     "sku": 6679150,
     "salePrice": 999.99,
@@ -136,7 +141,8 @@ def test_the_adapters_rows_are_accepted_by_the_real_schema(tmp_path):
     than on the day someone finally has a key."""
     path = tmp_path / "prices.csv"
     path.write_text(HEADER, encoding="utf-8")
-    append_rows([row_from(ON_SALE, AT), row_from(AT_LIST, AT)], path)
+    append_rows([{**row_from(ON_SALE, AT), **BY_HAND},
+                 {**row_from(AT_LIST, AT), **BY_HAND}], path)
 
     conn = connect(":memory:")
     init_db(conn)
@@ -153,8 +159,8 @@ def test_a_sold_out_row_without_a_price_is_still_accepted(tmp_path):
     the adapter is most likely to trip, so it is exercised directly."""
     path = tmp_path / "prices.csv"
     path.write_text(HEADER, encoding="utf-8")
-    append_rows([row_from({**ON_SALE, "orderable": "SoldOut",
-                           "salePrice": None}, AT)], path)
+    append_rows([{**row_from({**ON_SALE, "orderable": "SoldOut",
+                                       "salePrice": None}, AT), **BY_HAND}], path)
 
     conn = connect(":memory:")
     init_db(conn)
@@ -177,9 +183,26 @@ def test_a_column_this_adapter_cannot_fill_is_refused(tmp_path):
                     encoding="utf-8")
 
     with pytest.raises(IncompleteRow) as caught:
-        append_rows([row_from(ON_SALE, AT)], path)
+        append_rows([{**row_from(ON_SALE, AT), **BY_HAND}], path)
 
     assert "pickup_eta" in str(caught.value)
+    assert path.read_text(encoding="utf-8").splitlines()[1:] == []
+
+
+def test_an_unverified_seller_is_left_out_rather_than_assumed(tmp_path):
+    """`seller` decides whether a listing is first-party, which is the whole
+    basis of the comparison, and no documented product attribute carries it.
+    It used to be hard-coded to 'Best Buy' directly under a comment saying the
+    source was unconfirmed. A value nothing verifies is not supplied, so the
+    landing file's own header refuses the row."""
+    path = tmp_path / "prices.csv"
+    path.write_text(HEADER, encoding="utf-8")
+
+    assert "seller" not in row_from(ON_SALE, AT)
+    with pytest.raises(IncompleteRow) as caught:
+        append_rows([row_from(ON_SALE, AT)], path)
+
+    assert "seller" in str(caught.value)
     assert path.read_text(encoding="utf-8").splitlines()[1:] == []
 
 
@@ -189,7 +212,7 @@ def test_rows_follow_the_landing_files_own_header(tmp_path):
     by one and raise nothing."""
     path = tmp_path / "prices.csv"
     path.write_text(HEADER, encoding="utf-8")
-    append_rows([row_from(ON_SALE, AT)], path)
+    append_rows([{**row_from(ON_SALE, AT), **BY_HAND}], path)
 
     conn = connect(":memory:")
     init_db(conn)
