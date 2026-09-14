@@ -283,13 +283,22 @@ def verify_grounded(prose: str, context: Mapping[str, Any]) -> list[str]:
     price is a perfectly plausible price. Reported as written, so the page can
     name the value it refused.
 
-    **What it does not check.** Membership only. A figure that belongs to one
-    product, attached in the prose to another, is present in the context and
-    passes: `Dell 14S was listed at $1,299.99` is wrong and grounded. So is a
-    count borrowed from an unrelated field. Catching that needs the claim
-    parsed and matched to its subject, which this does not attempt. The check
-    bounds invention, not interpretation, and the summary is worth exactly
-    that much.
+    **What it does not check.** Membership of numeric tokens, and nothing else.
+    Everything below passes:
+
+    * a figure attached to the wrong subject, because the figure is present:
+      `Dell 14S was listed at $1,299.99` is wrong and grounded, as is a count
+      borrowed from an unrelated field;
+    * a number carrying the wrong unit, since only the digits are compared;
+    * any sentence with no figure in it at all, including a causal claim, a
+      forecast or a recommendation. The system prompt forbids all three and
+      nothing here enforces that.
+
+    Catching any of these needs the claim parsed and matched to its subject,
+    which this does not attempt. The check bounds invention, not
+    interpretation, and the summary is worth exactly that much. A reviewer
+    weighing how far to trust the prose should read this paragraph as the
+    limit, not the docstring above it.
     """
     grounded = _context_numbers(context)
     seen: set[str] = set()

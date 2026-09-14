@@ -45,7 +45,7 @@ def open_pages(products: pd.DataFrame,
 
 
 def prompt_for(product: Any, ask: Callable[[str], str]) -> dict[str, str] | object:
-    """Collect the six observed fields for one product, or SKIP it."""
+    """Collect the observed fields for one product, or SKIP it."""
     label = f"{product.brand} {product.model_name} (SKU {product.sku})"
     print(f"\n{label}")
     print(f"  {product.source_url}")
