@@ -16,6 +16,7 @@ import webbrowser
 from collections.abc import Callable, Iterable
 from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 from typing import Any
 
 import pandas as pd
@@ -26,12 +27,19 @@ ROOT = Path(__file__).resolve().parents[1]
 PRODUCTS_CSV = ROOT / "data" / "structured" / "products.csv"
 PRICES_CSV = ROOT / "data" / "structured" / "prices_manual.csv"
 
+#: Every timestamp in the landing file is Asia/Taipei, and the session banner
+#: says so. `datetime.now()` is whatever the operator's machine is set to, so a
+#: capture taken from another timezone was labelled Taipei and filed eight
+#: hours out. The strict comparison pairs snapshots by exact timestamp, so that
+#: is not a cosmetic error: it decides what compares with what.
+CAPTURE_ZONE = ZoneInfo("Asia/Taipei")
+
 AVAILABILITY_CHOICES = {"1": "Add to cart", "2": "Unavailable", "3": "Sold Out"}
 SKIP = object()
 
 
 def session_timestamp(now: datetime | None = None) -> str:
-    return (now or datetime.now()).strftime(TIMESTAMP_FORMAT)
+    return (now or datetime.now(CAPTURE_ZONE)).strftime(TIMESTAMP_FORMAT)
 
 
 def open_pages(products: pd.DataFrame,
