@@ -166,8 +166,14 @@ def magnitude(change: float | None, reference_price: float | None) -> float:
     percent cut does not change what a reader does about it.
 
     A kind that carries no figure gets ``BASE_MAGNITUDE``. It is deliberately
-    low, so that a state such as a stock note cannot outrank a real move, and
-    deliberately non-zero, so that it cannot be ranked out of existence.
+    non-zero, so a state cannot be ranked out of existence, and deliberately
+    low. Low is not the same as always losing, and the earlier wording here
+    claimed it was: a strict stock note scores 0.07, so a strict price move
+    ranks below it until the move is worth about 0.7 percent of list, which on
+    a $1,299.99 machine is $9.10. Whether a $5 move should lead the page is
+    a judgement, and this is where it is made rather than hidden. The four
+    constants are policy, not measurement; nothing here was calibrated against
+    outcomes because there are none to calibrate against.
     """
     if change is None or not reference_price:
         return BASE_MAGNITUDE
@@ -522,6 +528,12 @@ def detect(prices: pd.DataFrame, products: pd.DataFrame,
                                {"sku": sku, "name": name_of(sku),
                                 "ends": ends, "at": _stamp(at)}))
 
+        # Every value this column has held is a Best Buy scarcity badge ("Act
+        # fast - Only 1 left"), which is why the kind is named for scarcity.
+        # The test is only that the field is non-empty, so a seller who wrote
+        # "plenty available" there would be reported under a name that
+        # contradicts the sentence. The sentence itself quotes the note and
+        # claims nothing, which bounds the damage but does not remove it.
         hint = _value(last, "stock_hint")
         if hint:
             found.append(build("stock_scarcity", (sku,), at,
@@ -646,6 +658,11 @@ class Selection:
 
     insights: tuple[Insight, ...]
     framing: str | None
+    #: "score" when no model was asked, "model" when one chose, "fallback"
+    #: when one was asked and did not answer usefully. The last two are the
+    #: distinction the docstring above exists for, and collapsing them into
+    #: "score" told a reader the model was never involved when it had just
+    #: failed.
     source: str
 
 
@@ -752,6 +769,10 @@ def select_with_model(insights: list[Insight], client: Any, model: str,
     if not insights:
         return select_by_score(insights, k)
 
+    def asked_and_failed() -> Selection:
+        return Selection(insights=select_by_score(insights, k).insights,
+                         framing=None, source="fallback")
+
     payload = _candidates(insights)
     try:
         reply = client.chat.completions.create(
@@ -767,11 +788,11 @@ def select_with_model(insights: list[Insight], client: Any, model: str,
         parsed = None
 
     if parsed is None:
-        return select_by_score(insights, k)
+        return asked_and_failed()
 
     chosen = _chosen(parsed, len(insights), k)
     if chosen is None:
-        return select_by_score(insights, k)
+        return asked_and_failed()
 
     framing = parsed.get("framing")
     framing = framing.strip() if isinstance(framing, str) else None

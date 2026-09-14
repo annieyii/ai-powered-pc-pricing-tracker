@@ -641,7 +641,7 @@ def test_an_out_of_range_index_falls_back_to_score_ordering():
     found = candidates()
     client = FakeClient('{"indices": [0, 999], "framing": "look here"}')
     picked = select_with_model(found, client, "some-model", k=3)
-    assert picked.source == "score"
+    assert picked.source == "fallback"
     assert list(picked.insights) == found[:3]
     assert picked.framing is None
 
@@ -649,27 +649,27 @@ def test_an_out_of_range_index_falls_back_to_score_ordering():
 def test_a_negative_index_falls_back_too():
     found = candidates()
     client = FakeClient('{"indices": [-1], "framing": null}')
-    assert select_with_model(found, client, "some-model").source == "score"
+    assert select_with_model(found, client, "some-model").source == "fallback"
 
 
 def test_a_reply_that_is_not_json_falls_back():
     found = candidates()
     client = FakeClient("I think the first one is most interesting.")
     picked = select_with_model(found, client, "some-model", k=2)
-    assert picked.source == "score"
+    assert picked.source == "fallback"
     assert list(picked.insights) == found[:2]
 
 
 def test_an_empty_selection_falls_back():
     found = candidates()
     client = FakeClient('{"indices": [], "framing": null}')
-    assert select_with_model(found, client, "some-model").source == "score"
+    assert select_with_model(found, client, "some-model").source == "fallback"
 
 
 def test_a_selection_longer_than_k_falls_back():
     found = candidates()
     client = FakeClient('{"indices": [0, 1, 2, 3], "framing": null}')
-    assert select_with_model(found, client, "some-model", k=3).source == "score"
+    assert select_with_model(found, client, "some-model", k=3).source == "fallback"
 
 
 def test_a_client_that_raises_falls_back():
@@ -682,7 +682,7 @@ def test_a_client_that_raises_falls_back():
 
     found = candidates()
     picked = select_with_model(found, Exploding(), "some-model", k=2)
-    assert picked.source == "score"
+    assert picked.source == "fallback"
     assert list(picked.insights) == found[:2]
 
 
@@ -732,7 +732,7 @@ def test_select_with_model_on_an_empty_candidate_list_never_calls_out():
 def test_a_duplicated_index_falls_back():
     found = candidates()
     client = FakeClient('{"indices": [0, 0], "framing": null}')
-    assert select_with_model(found, client, "some-model").source == "score"
+    assert select_with_model(found, client, "some-model").source == "fallback"
 
 
 def test_an_insight_is_frozen():
@@ -792,3 +792,14 @@ def test_score_still_breaks_ties_inside_a_group():
 def test_an_unknown_group_name_is_ignored_rather_than_obeyed():
     found = four_captures()
     assert prefer(found, ["Nonsense"]) == found
+
+
+def test_a_small_price_move_ranks_below_a_stock_note():
+    """Pins the crossover the docstring names, because the earlier docstring
+    claimed a state could never outrank a move and the arithmetic disagreed."""
+    note = score("stock_scarcity", ("strict",))["significance"]
+    small = score("price_change", ("strict",), change=1.00,
+                  reference_price=1299.99)["significance"]
+    large = score("price_change", ("strict",), change=250.00,
+                  reference_price=1299.99)["significance"]
+    assert small < note < large
