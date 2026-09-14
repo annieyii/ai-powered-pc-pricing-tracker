@@ -657,15 +657,13 @@ st.header("6. Tracked products and their listings")
 st.caption("Every price on this page was read by hand from the listing linked "
            "below it.")
 
+#: The two roles the schema allows, in the order they matter. The heading
+#: carries the distinction: sections 1 and 5 already explain the rule and why
+#: reference SKUs are muted, and saying it a third time here crowded four
+#: bullets behind four lines of prose they had already read.
 ROLE_SECTIONS = [
-    ("strict", "The equivalence pair",
-     "Matched on processor model, memory, storage, screen size, operating "
-     "system, device type and form factor. Only these two enter the "
-     "price-difference metric."),
-    ("reference", "Reference",
-     "Muted on the chart and outside the comparison. Each differs from the "
-     "pair on more than one field, so no difference is attributed to any "
-     "single attribute."),
+    ("strict", "The equivalence pair — the only two in the price difference"),
+    ("reference", "Reference — context, each differing on more than one field"),
 ]
 
 
@@ -681,12 +679,11 @@ def listing_line(product: Any) -> str:
             f"{product.display_type} · {product.availability}")
 
 
-for role, heading, note in ROLE_SECTIONS:
+for role, heading in ROLE_SECTIONS:
     rows = table[table["role"] == role]
     if rows.empty:
         continue
     st.markdown(f"**{heading}**")
-    st.caption(note)
     for product in rows.itertuples():
         st.write(usd(listing_line(product)))
 
