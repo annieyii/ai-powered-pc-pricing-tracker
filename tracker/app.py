@@ -614,6 +614,11 @@ with summary_area:
 
 # ------------------------------------------------------------ 4. snapshot
 st.header("4. Latest observation per product")
+# The computed summary above lists the same prices, because it has to stand on
+# its own once written to data/summary.md. What it cannot carry is the
+# specification columns and the time each price was read, which is this table.
+st.caption("The same latest prices the summary states, with the specification "
+           "columns and the capture time behind each one.")
 
 # Left join so a selected product with no usable snapshot stays visible instead
 # of disappearing from the comparison. Joining from the whole master instead
