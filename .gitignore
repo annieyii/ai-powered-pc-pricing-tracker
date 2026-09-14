@@ -26,5 +26,9 @@ docs/diagrams/*.visual-check.*
 # LaTeX build output
 report/
 
+# Working notes: the plan, the spec, the capture checklist, the review
+# prompt. The architecture they describe is in the README instead.
+docs/
+
 # Supplied reference material, not mine to redistribute
 files/

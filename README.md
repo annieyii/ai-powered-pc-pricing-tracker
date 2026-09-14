@@ -4,7 +4,7 @@ Tracks the listed price of four comparable 14-inch Windows Copilot+ PCs on Best 
 
 Prices are recorded by hand into an append-only CSV. Every page load rebuilds an in-memory SQLite database from it, and the schema is what refuses a bad row.
 
-The reasoning behind the product choice, the equivalence rule, the assumptions and the limitations is in the written explanation. This file is how to run it.
+The reasoning behind the product choice, the equivalence rule, the assumptions and the limitations is in the two-page written explanation, submitted alongside this repository rather than committed to it. This file is what the system is and how to run it.
 
 ## Running it
 
@@ -53,6 +53,39 @@ No code change is needed.
 If a field is not shown, leave it blank. Never guess.
 
 A row the schema refuses (unknown SKU, duplicate capture time, a seller other than Best Buy, a purchasable listing with no price, savings that do not reconcile) appears at the top of the page with its CSV line number and the database's own reason. It is left in the file untouched, and the rest of the data still loads.
+
+## How it works
+
+```
+capture.py            a person reads each product page and types what it says.
+  or bestbuy.py       One capture session, one timestamp, every SKU in it.
+      |               bestbuy.py is the same job from the API, not integrated.
+      v
+prices_manual.csv     The system of record. Append only. Its git diff is the
+      |               audit trail, which is why nothing writes past it.
+      v
+store.py              Rebuilt in memory on every page load, never persisted.
+      |               The schema refuses a bad row; two triggers refuse a
+      |               strict group that does not satisfy the equivalence rule.
+      v
+metrics.py            Every figure the page shows, computed from DataFrames.
+insights.py           No file, no network, no model. Same input, same output.
+      |
+      v
+app.py                One selection, applied once, binding every section.
+```
+
+The point of the shape is that the answer is computed before anything is said about it. A language model is offered three jobs and none of them is arithmetic:
+
+| Where | What it does | What bounds it |
+|---|---|---|
+| `extract.py` | reads a raw spec block into twelve fields | a pydantic schema that forbids unexpected keys, deterministic validators, and a score against the hand-verified master. It can never write to that master |
+| `insights.select_with_model` | returns the indices of the findings to lead with | it is handed finished sentences and asked only for integers, so it cannot state a figure. One bad index discards the whole reply |
+| `summarise.summarise` | writes at most 150 words from the computed values | every number in the reply must appear in those values or the whole summary is thrown away, retried once, then replaced by a deterministic one |
+
+None of the three runs on page load, and the dashboard is complete without any of them.
+
+What that does **not** buy: the grounding check tests numeric tokens only, so a figure attached to the wrong product, a wrong unit, or a sentence with no figure at all passes it. The docstring on `verify_grounded` says so in full.
 
 ## Layout
 
