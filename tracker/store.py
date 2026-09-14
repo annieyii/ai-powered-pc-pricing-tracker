@@ -232,9 +232,24 @@ def ingest_prices(conn: sqlite3.Connection, csv_path: Path | str) -> IngestResul
             continue
 
         values = [sku, stamp.strftime(TIMESTAMP_FORMAT)]
+        # A blank money cell is a fact: the page showed no such figure. Text
+        # that is not a number is not, and coercing it to NULL would turn
+        # corrupt input into a plausible absence, which is repair by another
+        # name. Blank is kept, unreadable is refused.
+        unreadable = None
         for column in MONEY_COLUMNS:
-            amount = pd.to_numeric(_cell(record[column]), errors="coerce")
-            values.append(None if pd.isna(amount) else float(amount))
+            cell = _cell(record[column])
+            if cell is None:
+                values.append(None)
+                continue
+            amount = pd.to_numeric(cell, errors="coerce")
+            if pd.isna(amount):
+                unreadable = f"{column} {str(cell)!r} is not a number"
+                break
+            values.append(float(amount))
+        if unreadable is not None:
+            rejected.append(Rejection(line, sku, raw, unreadable))
+            continue
         values += [
             _cell(record["availability"]),
             _cell(record["seller"]),

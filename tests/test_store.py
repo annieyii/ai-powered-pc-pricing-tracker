@@ -235,3 +235,18 @@ def test_a_column_name_that_is_not_a_plain_identifier_is_refused():
 def test_a_master_with_no_extra_columns_adds_none():
     frame = pd.DataFrame(columns=list(PRODUCT_FIELDS))
     assert extra_product_columns(frame) == []
+
+
+def test_money_that_is_not_a_number_is_refused_not_blanked(tmp_path):
+    """Coercing unreadable text to NULL is repair: it turns corrupt input into
+    a plausible "the page showed no such figure"."""
+    prices = tmp_path / "prices.csv"
+    prices.write_text(
+        "sku,captured_at_local,price,regular_price,savings,availability,"
+        "seller,stock_hint,note\n"
+        "6672159,2026-09-12T15:07,not-a-price,,,Unavailable,Best Buy,,\n",
+        encoding="utf-8")
+    data = build(PRODUCTS_CSV, prices)
+    assert data.accepted == 0
+    assert "price" in data.rejected[0].reason
+    assert "not-a-price" in data.rejected[0].reason
