@@ -97,8 +97,52 @@ FILTER_LABELS = {
     "display_type": "Display", "screen_resolution": "Resolution",
     "list_price": "List price", "operating_system": "Operating system",
     "device_type": "Device type", "form_factor": "Form factor",
-    "touch_screen": "Touch screen",
+    "touch_screen": "Touch screen", "npu_tops": "NPU (TOPS)",
+    "battery_life_hours": "Battery life (h)", "weight_lb": "Weight (lb)",
+    "usb_ports": "USB ports", "thunderbolt_ports": "Thunderbolt ports",
 }
+
+
+#: The seven fields the equivalence rule checks, as the store's triggers
+#: enforce them. Named here so the page can describe what the rule did not
+#: look at without a second copy of the list going stale against the first.
+RULE_FIELDS = ("cpu", "ram_gb", "storage_gb", "screen_inch",
+               "operating_system", "device_type", "form_factor")
+
+#: Columns that say which product a row is rather than what it is like. Two
+#: different products differ on all of them by definition, so reporting it
+#: would bury the differences that mean something.
+IDENTITY = frozenset({"sku", "role", "brand", "model_name", "model_number",
+                      "source_url", "list_price"})
+
+
+def _plain(value: Any) -> str:
+    """A cell as prose: 15.0 is a reading of a spec sheet, 15 is the spec."""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def unkeyed_differences(products: pd.DataFrame) -> list[str]:
+    """Where the strict pair differs on something the rule never checked.
+
+    Computed rather than written down. The page used to state the brightness
+    figures as literals, which stayed on screen unchanged after the master was
+    corrected and said nothing at all about the fields added since.
+    """
+    rows = products[products["role"] == "strict"]
+    if len(rows) != 2:
+        return []
+    left, right = rows.iloc[0], rows.iloc[1]
+    out = []
+    for column in products.columns:
+        if column in RULE_FIELDS or column in IDENTITY:
+            continue
+        a, b = left[column], right[column]
+        if (pd.isna(a) and pd.isna(b)) or str(a) == str(b):
+            continue
+        out.append(f"{filter_label(column)} {_plain(a)} against {_plain(b)}")
+    return out
 
 
 def filterable_columns(products: pd.DataFrame) -> list[str]:
@@ -362,6 +406,11 @@ scoped = scope.apply(data.prices)
 # from the master lists excluded products with null prices, which reads as
 # missing data beside a correctly filtered chart.
 selected = data.products[data.products["sku"].isin(picked)]
+# Everything below this line takes `selected`, never the master. Passing the
+# master to one section and the selection to another put two different reasons
+# for the same absence on one screen: "the strict products were never all
+# priced at the same capture time", which reads as broken data, beside "the
+# selection holds 1 of the strict products", which is the truth.
 view = replace(data, prices=scoped, products=selected)
 filtered = scope.key() != Scope().key()
 
@@ -392,18 +441,18 @@ if filtered:
             f"observations are in view, and every section below reflects it.")
 
 latest_rows = latest_per_sku(scoped)
-points = strict_time_points(scoped, data.products)
+points = strict_time_points(scoped, selected)
 st.caption(f"Last observation {scoped['captured_at'].max():%Y-%m-%d %H:%M} · "
            f"{len(scoped)} snapshots · "
            f"{points} capture time(s) covering the strict group")
 
-found = prefer(detect(scoped, data.products), lead)
+found = prefer(detect(scoped, selected), lead)
 
 # ------------------------------------------------------- headline result
 # The question the page exists to answer, above the evidence for it. A reader
 # who stops after one screen should still leave with the answer rather than
 # with a chart they have to interpret first.
-comparison = strict_comparison(scoped, data.products)
+comparison = strict_comparison(scoped, selected)
 names = dict(zip(data.products["sku"],
                  data.products["brand"] + " " + data.products["model_name"]))
 
@@ -453,10 +502,10 @@ st.caption("Every product in the selection is plotted. Those that satisfy the "
            "because each differs from the pair on more than one field and none "
            "enters the price-difference metric.")
 
-strict = data.products[data.products["role"] == "strict"]
+strict = selected[selected["role"] == "strict"]
 # Strict first, so the pair takes the strong colours and sits on top of the
 # context rather than under it.
-ordered = pd.concat([strict, data.products[data.products["role"] != "strict"]])
+ordered = pd.concat([strict, selected[selected["role"] != "strict"]])
 
 figure = go.Figure()
 for index, product in enumerate(ordered.itertuples()):
@@ -675,12 +724,14 @@ if not comparison["comparable"]:
 elif comparison["parity"]:
     # The figure is in the headline row. What is left here is the part that
     # needs the space: which fields the rule used, and which it did not.
+    differences = unkeyed_differences(selected)
     st.write(
         f"**Price parity at {comparison['captured_at']:%Y-%m-%d %H:%M}.** "
         "Both SKUs match on every field the equivalence rule uses (processor "
         "model, memory, storage, screen size, operating system, device type "
-        "and form factor) and were listed at the same price. They still "
-        "differ outside that key: panel brightness is 400 nits against 300.")
+        "and form factor) and were listed at the same price."
+        + (" They still differ outside that key: "
+           + "; ".join(differences) + "." if differences else ""))
 else:
     st.write(usd(
         f"At {comparison['captured_at']:%Y-%m-%d %H:%M}, "
