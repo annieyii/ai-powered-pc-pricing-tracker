@@ -21,6 +21,7 @@ from tracker.store import (
 )
 
 PRODUCTS_CSV = "data/structured/products.csv"
+PRICES_CSV = "data/structured/prices_manual.csv"
 HEADER = ("sku,captured_at_local,price,regular_price,savings,"
           "availability,seller,stock_hint,note\n")
 LENOVO, HP = "6672159", "6668002"
@@ -254,3 +255,47 @@ def test_money_that_is_not_a_number_is_refused_not_blanked(tmp_path):
     assert data.accepted == 0
     assert "price" in data.rejected[0].reason
     assert "not-a-price" in data.rejected[0].reason
+
+
+# --- `strict` is a claim the store checks, not a label it takes -----------
+
+def _master(tmp_path, **edits):
+    """The real master with one cell changed, written where build can read it."""
+    frame = pd.read_csv(PRODUCTS_CSV, dtype={"sku": str})
+    for sku, column, value in edits.get("changes", []):
+        frame.loc[frame["sku"] == sku, column] = value
+    path = tmp_path / "products.csv"
+    frame.to_csv(path, index=False)
+    return path
+
+
+def test_the_real_master_satisfies_its_own_equivalence_rule(tmp_path):
+    assert build(_master(tmp_path), PRICES_CSV).accepted > 0
+
+
+@pytest.mark.parametrize("column, value", [
+    ("cpu", "Intel Core Ultra 5 325"),
+    ("ram_gb", 32),
+    ("storage_gb", 1024),
+    ("screen_inch", 16.0),
+    ("form_factor", "clamshell"),
+])
+def test_a_strict_pair_that_breaks_the_rule_is_refused(tmp_path, column, value):
+    """Until this was enforced, `strict` was a label. A master naming two
+    machines that differ on a rule field was accepted and the page went on
+    calling the result a matched-pair observation."""
+    path = _master(tmp_path, changes=[("6668002", column, value)])
+    with pytest.raises(ValueError) as caught:
+        build(path, PRICES_CSV)
+    assert "6668002" in str(caught.value)
+
+
+def test_a_third_strict_product_is_refused(tmp_path):
+    """The comparison takes the cheapest and the dearest of the strict group.
+    A third member turns a matched-pair delta into a range across products
+    never claimed to be equivalent to each other."""
+    path = _master(tmp_path, changes=[("6679150", "role", "strict")])
+    with pytest.raises(ValueError) as caught:
+        build(path, PRICES_CSV)
+    assert "pair" in str(caught.value)
+

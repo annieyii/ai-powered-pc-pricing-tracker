@@ -72,6 +72,45 @@ CREATE TABLE price_snapshots (
     CHECK (savings IS NULL OR regular_price IS NULL OR price IS NULL
            OR abs(savings - (regular_price - price)) < 0.02)
 );
+
+-- `strict` is the claim the whole comparison rests on, and until these two
+-- triggers existed it was only a label: a master naming two machines with
+-- different processors, or naming three of them, was accepted and the page
+-- went on describing the result as a matched pair. A CHECK cannot see other
+-- rows, so the rule lives in triggers rather than in a column constraint, but
+-- it is still the database refusing the row rather than a chain of Python.
+--
+-- The seven fields are the equivalence rule: processor model, memory,
+-- storage, screen size, operating system, device type and form factor. `IS
+-- NOT` rather than `<>` so a null on one side is a disagreement instead of
+-- an unknown that passes.
+CREATE TRIGGER strict_products_must_satisfy_the_equivalence_rule
+AFTER INSERT ON products
+WHEN NEW.role = 'strict'
+BEGIN
+    SELECT RAISE(ABORT, 'strict products must match on processor model, memory, storage, screen size, operating system, device type and form factor')
+    WHERE EXISTS (SELECT 1 FROM products
+                  WHERE role = 'strict' AND sku <> NEW.sku
+                    AND (cpu              IS NOT NEW.cpu
+                      OR ram_gb           IS NOT NEW.ram_gb
+                      OR storage_gb       IS NOT NEW.storage_gb
+                      OR screen_inch      IS NOT NEW.screen_inch
+                      OR operating_system IS NOT NEW.operating_system
+                      OR device_type      IS NOT NEW.device_type
+                      OR form_factor      IS NOT NEW.form_factor));
+END;
+
+-- A third strict product does not make a larger pair. The comparison takes
+-- the cheapest and the dearest, so a third one silently turns a matched-pair
+-- delta into a range across a group that was never claimed to be equivalent
+-- as a group.
+CREATE TRIGGER the_strict_group_is_a_pair
+AFTER INSERT ON products
+WHEN NEW.role = 'strict'
+BEGIN
+    SELECT RAISE(ABORT, 'the strict group is a pair; a third strict product cannot be compared as one')
+    WHERE (SELECT count(*) FROM products WHERE role = 'strict') > 2;
+END;
 """
 
 PRODUCT_FIELDS = [
@@ -179,8 +218,17 @@ def ingest_products(conn: sqlite3.Connection, csv_path: Path | str) -> int:
     statement = (f"INSERT INTO products ({', '.join(fields)}) "
                  f"VALUES ({', '.join('?' for _ in fields)})")
     count = 0
-    for record in frame[fields].to_dict("records"):
-        conn.execute(statement, [_cell(record[f]) for f in fields])
+    for line, record in enumerate(frame[fields].to_dict("records"), start=2):
+        try:
+            conn.execute(statement, [_cell(record[f]) for f in fields])
+        except sqlite3.IntegrityError as exc:
+            # The master is not a landing file. One bad price row is reported
+            # and the rest of the page still loads; one bad product row means
+            # every comparison below it is describing something else, so this
+            # stops rather than continues.
+            raise ValueError(
+                f"products file line {line} (sku {record['sku']}) was refused: "
+                f"{exc}") from exc
         count += 1
     conn.commit()
     return count
