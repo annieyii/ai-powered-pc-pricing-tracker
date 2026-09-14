@@ -150,7 +150,7 @@ MARKERS = ["circle", "circle-open", "diamond-open", "x"]
 SIZES = [13, 9, 9, 9]
 
 st.set_page_config(page_title="PC Pricing Tracker", layout="wide")
-st.title("PC Pricing Tracker — Best Buy")
+st.title("PC Pricing Tracker: Best Buy")
 st.caption("Manually verified observations. Store: Union Square, NYC. "
            "Currency: USD. Times are Asia/Taipei.")
 
@@ -668,7 +668,7 @@ st.dataframe(
     width="stretch", hide_index=True)
 
 # ----------------------------------------------------------- 5. comparison
-st.header("5. Strict group — matched-pair observation")
+st.header("5. Strict group, matched-pair observation")
 
 if not comparison["comparable"]:
     st.info(f"Not comparable: {comparison['reason']}.")
@@ -677,9 +677,9 @@ elif comparison["parity"]:
     # needs the space: which fields the rule used, and which it did not.
     st.write(
         f"**Price parity at {comparison['captured_at']:%Y-%m-%d %H:%M}.** "
-        "Both SKUs match on every field the equivalence rule uses — processor "
+        "Both SKUs match on every field the equivalence rule uses (processor "
         "model, memory, storage, screen size, operating system, device type "
-        "and form factor — and were listed at the same price. They still "
+        "and form factor) and were listed at the same price. They still "
         "differ outside that key: panel brightness is 400 nits against 300.")
 else:
     st.write(usd(
@@ -703,8 +703,8 @@ st.caption("Every price on this page was read by hand from the listing linked "
 #: reference SKUs are muted, and saying it a third time here crowded four
 #: bullets behind four lines of prose they had already read.
 ROLE_SECTIONS = [
-    ("strict", "The equivalence pair — the only two in the price difference"),
-    ("reference", "Reference — context, each differing on more than one field"),
+    ("strict", "The equivalence pair, the only two in the price difference"),
+    ("reference", "Reference: context, each differing on more than one field"),
 ]
 
 
@@ -713,10 +713,10 @@ def listing_line(product: Any) -> str:
     price = "not observed" if pd.isna(product.price) else f"${product.price:,.2f}"
     note = ""
     if not pd.isna(product.savings) and product.savings:
-        note = (f" — discounted ${product.savings:,.2f} from "
+        note = (f", discounted ${product.savings:,.2f} from "
                 f"${product.regular_price:,.2f}")
     return (f"- **[{product.brand} {product.model_name}]({product.source_url})** "
-            f"— {price}{note} · {product.cpu} · {product.form_factor} · "
+            f"· {price}{note} · {product.cpu} · {product.form_factor} · "
             f"{product.display_type} · {product.availability}")
 
 
