@@ -17,8 +17,14 @@ with the value that has to be confirmed on the first real call.
 Why the output is a CSV row rather than a database write: `prices_manual.csv`
 is the system of record and its git diff is the audit trail. An automated
 capture that wrote past it would be a second, invisible source of truth. So
-this appends the same nine columns a human would have typed, and everything
-downstream stays unchanged.
+this appends the columns a human would have typed.
+
+**It does not yet fill all of them.** `pickup_eta` was added to the landing
+file mid-window and comes from the store-availability call this module builds
+a URL for but never makes. A blank in that column is not a missing value to
+the change detector, it is a change: every SKU would report its pickup date
+moving to nothing on the first automated capture. `append_rows` refuses rather
+than writing a row the file has outgrown.
 
 Usage, once a key exists:
 
@@ -91,6 +97,10 @@ class UnmappedValue(Exception):
     """The API returned a value this adapter will not guess at."""
 
 
+class IncompleteRow(Exception):
+    """The landing file has a column this adapter cannot fill."""
+
+
 def read_settings(env: Mapping[str, str]) -> str:
     """The API key, refusing to guess at it.
 
@@ -156,6 +166,11 @@ def row_from(payload: Mapping[str, Any], captured_at: datetime) -> dict[str, Any
         "regular_price": _money(payload.get("regularPrice")) if on_sale else None,
         "savings": _money(payload.get("dollarSavings")) if on_sale else None,
         "availability": ORDERABLE[orderable],
+        # TODO: unfilled. The Products API carries no pickup date; it comes
+        # from the store-availability call `product_url` builds and nothing
+        # calls. Until that exists `append_rows` refuses the row rather than
+        # blanking the column.
+        #
         # TODO: the Products API exposes no verified first-party/marketplace
         # flag, and the store's CHECK constraint admits 'Best Buy' only. The
         # manual process read "Sold by Best Buy" off the page. Confirm which
@@ -181,13 +196,21 @@ def fetch(sku: str, api_key: str,
 def append_rows(rows: list[dict[str, Any]], path: Path = PRICES_CSV) -> int:
     """Append to the landing file in the column order its own header states.
 
-    The header is read rather than assumed. The landing file gains columns
-    (pickup_eta was added mid-window), and writing the nine this module knows
-    into a ten-column file would shift every later value one column left
-    without raising anything. A column this adapter cannot fill is left blank.
+    The header is read rather than assumed, and a column this adapter cannot
+    fill is a refusal rather than a blank. Blank is not neutral here: the
+    change detector compares each recorded column against the previous
+    capture, so a column that held `today` and then holds nothing is a
+    movement, and a run of those is a page reporting changes that never
+    happened.
     """
     with open(path, newline="", encoding="utf-8") as handle:
         header = next(csv.reader(handle), None) or PRICE_CSV_COLUMNS
+    unfilled = sorted({c for c in header for row in rows if c not in row})
+    if unfilled:
+        raise IncompleteRow(
+            f"the landing file records {', '.join(unfilled)} and this adapter "
+            f"does not supply {'it' if len(unfilled) == 1 else 'them'}. "
+            f"Writing blank would read as a change from the last capture.")
     with open(path, "a", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=header)
         for row in rows:
@@ -222,15 +245,19 @@ def main(argv: list[str] | None = None) -> int:
         # letting one out abandons every SKU after it. UnmappedValue is this
         # adapter refusing to guess, which is a different thing.
         except (UnmappedValue, urllib.error.URLError, OSError, ValueError,
-                KeyError) as exc:
+                KeyError) as exc:  # noqa: PERF203
             print(f"{sku}: refused, {exc}", file=sys.stderr)
             refused += 1
 
     if args.dry_run:
         for row in rows:
             print(row)
-    else:
-        append_rows(rows)
+    elif rows:
+        try:
+            append_rows(rows)
+        except IncompleteRow as exc:
+            print(f"nothing appended: {exc}", file=sys.stderr)
+            return 2
 
     print(f"{len(rows)} rows, {refused} refused", file=sys.stderr)
     return 1 if refused else 0

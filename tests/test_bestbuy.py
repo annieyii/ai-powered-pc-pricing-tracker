@@ -14,6 +14,7 @@ import pytest
 
 from tracker.bestbuy import (
     REQUEST_TIMEOUT,
+    IncompleteRow,
     MissingSetting,
     UnmappedValue,
     append_rows,
@@ -164,13 +165,30 @@ def test_a_sold_out_row_without_a_price_is_still_accepted(tmp_path):
     assert result.rejected == []
 
 
-def test_rows_follow_the_landing_files_own_header(tmp_path):
-    """The landing file gained a column mid-window. Writing the nine columns
-    this adapter knows into a ten-column file would shift every later value
-    left by one and raise nothing, so the header is read, not assumed."""
+def test_a_column_this_adapter_cannot_fill_is_refused(tmp_path):
+    """The landing file gained `pickup_eta` mid-window and the Products API
+    carries no pickup date. Writing it blank passes every CHECK in the store
+    and is still wrong: the change detector reads each recorded column against
+    the previous capture, so `today` followed by nothing is a movement. Four
+    SKUs would report a pickup date that moved and a stock note that vanished
+    on the first automated capture, and none of it happened."""
     path = tmp_path / "prices.csv"
     path.write_text(HEADER.replace("stock_hint,note", "stock_hint,pickup_eta,note"),
                     encoding="utf-8")
+
+    with pytest.raises(IncompleteRow) as caught:
+        append_rows([row_from(ON_SALE, AT)], path)
+
+    assert "pickup_eta" in str(caught.value)
+    assert path.read_text(encoding="utf-8").splitlines()[1:] == []
+
+
+def test_rows_follow_the_landing_files_own_header(tmp_path):
+    """The header is read, not assumed: the nine columns this adapter knows
+    written positionally into a wider file would shift every later value left
+    by one and raise nothing."""
+    path = tmp_path / "prices.csv"
+    path.write_text(HEADER, encoding="utf-8")
     append_rows([row_from(ON_SALE, AT)], path)
 
     conn = connect(":memory:")
@@ -180,6 +198,5 @@ def test_rows_follow_the_landing_files_own_header(tmp_path):
     conn.close()
 
     assert result.rejected == []
-    line = path.read_text(encoding="utf-8").splitlines()[1].split(",")
-    assert line[-2] == ""            # pickup_eta, which the API does not give
-    assert line[-1].startswith("captured via")
+    assert path.read_text(encoding="utf-8").splitlines()[1].split(",")[-1] \
+        .startswith("captured via")
