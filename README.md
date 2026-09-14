@@ -6,17 +6,32 @@ Prices are recorded by hand into an append-only CSV. Every page load rebuilds an
 
 The reasoning behind the product choice, the equivalence rule, the assumptions and the limitations is in the two-page written explanation, submitted alongside this repository rather than committed to it. This file is what the system is and how to run it.
 
-## Running it
-
-Requires [uv](https://docs.astral.sh/uv/) and Python 3.10 or newer.
+## Reviewer quick start
 
 ```bash
 uv sync
-uv run streamlit run tracker/app.py     # the dashboard
-uv run pytest                           # 294 tests, none reaching the network
+uv run streamlit run tracker/app.py
 ```
 
-That is the whole setup: no database to create, no environment variable, no API key. Every section renders deterministically without one.
+**No API key, no LLM endpoint, no database and no environment variable is required.** Every section of the dashboard renders deterministically without one.
+
+Without `uv`, the standard Python path works too:
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -e .
+streamlit run tracker/app.py
+```
+
+![Dashboard](docs/screenshot-dashboard.png)
+
+## Running the rest
+
+Python 3.10 or newer.
+
+```bash
+uv run pytest                           # 295 tests, none reaching the network
+```
 
 Two optional buttons on the page call a language model. Without an endpoint they are disabled and name the variable that is missing, which is the expected state rather than a failure. To enable them, fill in `.env` and export it, because nothing here reads `.env` for you:
 
@@ -37,7 +52,7 @@ uv run python -m tracker.extract
 No code change is needed.
 
 1. Open each `source_url` from `products.csv`, store still set to Union Square, NYC.
-2. Record seven fields per SKU into `prices_manual.csv`, with `captured_at_local` as `YYYY-MM-DDTHH:MM` in Asia/Taipei.
+2. Record seven structured fields per SKU into `prices_manual.csv`, plus an optional free-text note, with `captured_at_local` as `YYYY-MM-DDTHH:MM` in Asia/Taipei.
 3. Reload the page. The loader is deliberately not cached, so it reflects the file.
 
 | Field | What it is |
@@ -49,6 +64,7 @@ No code change is needed.
 | `seller` | The "Sold by" text |
 | `stock_hint` | The stock note as written, blank if none |
 | `pickup_eta` | `today`, or a date like `2026-09-18`. `today` is a state, not the capture date |
+| `note` | Optional free text: promotion expiry or countdown, page badges, shipping context. Not a structured field and not watched by the change detector, but `insights.py` reads a stated promotion end date out of it |
 
 If a field is not shown, leave it blank. Never guess.
 
@@ -66,7 +82,7 @@ prices_manual.csv     The system of record. Append only. Its git diff is the
       v
 store.py              Rebuilt in memory on every page load, never persisted.
       |               The schema refuses a bad row; two triggers refuse a
-      |               strict group that does not satisfy the equivalence rule.
+      |               matched pair that does not satisfy the equivalence rule.
       v
 metrics.py            Every figure the page shows, computed from DataFrames.
 insights.py           No file, no network, no model. Same input, same output.

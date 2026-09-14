@@ -27,8 +27,10 @@ docs/diagrams/*.visual-check.*
 report/
 
 # Working notes: the plan, the spec, the capture checklist, the review
-# prompt. The architecture they describe is in the README instead.
-docs/
+# prompt. The architecture they describe is in the README instead. The
+# dashboard screenshot is the exception: the README renders it.
+docs/*
+!docs/screenshot-dashboard.png
 
 # Supplied reference material, not mine to redistribute
 files/
