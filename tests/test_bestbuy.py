@@ -13,6 +13,7 @@ from io import BytesIO
 import pytest
 
 from tracker.bestbuy import (
+    REQUEST_TIMEOUT,
     MissingSetting,
     UnmappedValue,
     append_rows,
@@ -116,12 +117,16 @@ def test_fetch_does_not_dial_out_when_given_an_opener():
         def __exit__(self, *exc):
             return False
 
-    def opener(url):
-        calls.append(url)
+    # Same signature as urllib.request.urlopen, so a caller that forgets the
+    # timeout is a failure here rather than a request that waits on the
+    # operating system's default.
+    def opener(url, timeout=None):
+        calls.append((url, timeout))
         return FakeResponse(json.dumps(ON_SALE).encode())
 
     assert fetch("6679150", "KEY123", opener=opener)["sku"] == 6679150
-    assert "apiKey=KEY123" in calls[0]
+    assert "apiKey=KEY123" in calls[0][0]
+    assert calls[0][1] == REQUEST_TIMEOUT
 
 
 def test_the_adapters_rows_are_accepted_by_the_real_schema(tmp_path):

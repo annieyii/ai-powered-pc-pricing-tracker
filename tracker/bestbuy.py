@@ -78,6 +78,11 @@ ORDERABLE = {
 
 REQUIRED_ENV = ("BESTBUY_API_KEY",)
 
+#: Seconds to wait on one request. urlopen without one waits on the operating
+#: system's default, which on a hung connection is minutes; a capture session
+#: that stalls is worse than a SKU that is refused and reported.
+REQUEST_TIMEOUT = 30.0
+
 
 class MissingSetting(Exception):
     """A required environment variable was absent or blank."""
@@ -170,7 +175,7 @@ def fetch(sku: str, api_key: str,
     deliberately not reached from here: its response nests stores under the
     product and `row_from` would not read it.
     """
-    with opener(product_url(sku, api_key)) as response:
+    with opener(product_url(sku, api_key), timeout=REQUEST_TIMEOUT) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
@@ -213,7 +218,14 @@ def main(argv: list[str] | None = None) -> int:
             rows.append(row_from(fetch(sku, api_key), captured_at))
         # A refusal is reported and the remaining SKUs still run. Nothing is
         # repaired: the missing row simply stays missing, as in the manual path.
-        except (UnmappedValue, urllib.error.HTTPError, KeyError) as exc:
+        # Deliberately broad on the network side. A DNS failure, a timeout, a
+        # truncated body and a payload that is not JSON are all one SKU that
+        # could not be read, and letting any of them out of this loop would
+        # abandon the SKUs after it for a reason that has nothing to do with
+        # them. UnmappedValue is kept separate because it is this adapter
+        # refusing to guess, not the network failing.
+        except (UnmappedValue, urllib.error.URLError, OSError, ValueError,
+                KeyError) as exc:
             print(f"{sku}: refused, {exc}", file=sys.stderr)
             refused += 1
 
