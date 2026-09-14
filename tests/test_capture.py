@@ -59,12 +59,22 @@ def test_pages_are_opened_not_fetched():
 
 def test_prompt_collects_the_seven_observed_fields():
     row = prompt_for(a_product(), answers(
-        "1", "1299.99", "", "", "", "Only 1 left", "today", ""))
+        "1", "1299.99", "", "", "Best Buy", "Only 1 left", "today", ""))
     assert row["availability"] == "Add to cart"
     assert row["price"] == "1299.99"
     assert row["seller"] == "Best Buy"
     assert row["stock_hint"] == "Only 1 left"
     assert row["pickup_eta"] == "today"
+
+
+def test_an_unanswered_seller_stays_blank_rather_than_defaulting():
+    """This prompt defaulted to "Best Buy" on a blank answer, so an operator
+    who never read the "Sold by" line still produced a row claiming the
+    listing was first-party. First-party is what the comparison rests on. A
+    blank stays blank and the schema refuses the row."""
+    row = prompt_for(a_product(), answers(
+        "1", "1299.99", "", "", "", "Only 1 left", "today", ""))
+    assert row["seller"] == ""
 
 
 def test_prompt_allows_a_blank_price_when_not_purchasable():
@@ -115,7 +125,7 @@ def test_already_recorded_detects_a_repeat_of_the_same_session(prices):
 def test_main_records_every_product_and_validates(prices, capsys):
     replies = []
     for _ in range(4):
-        replies += ["1", "1299.99", "", "", "", "", "today", ""]
+        replies += ["1", "1299.99", "", "", "Best Buy", "", "today", ""]
     code = main(ask=answers(*replies), opener=lambda _url: None, now=NOW,
                 products_csv=PRODUCTS_CSV, prices_csv=prices)
     assert code == 0
@@ -128,7 +138,7 @@ def test_main_records_every_product_and_validates(prices, capsys):
 def test_main_reports_a_row_the_store_refuses(prices, capsys):
     """A purchasable listing with no price is refused by the schema, and the
     operator is told at once rather than finding out at the dashboard."""
-    replies = ["1", "", "", "", "", "", "today", ""]
+    replies = ["1", "", "", "", "Best Buy", "", "today", ""]
     for _ in range(3):
         replies += [""]
     code = main(ask=answers(*replies), opener=lambda _url: None, now=NOW,

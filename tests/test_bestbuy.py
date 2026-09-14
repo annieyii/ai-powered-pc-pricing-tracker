@@ -26,15 +26,21 @@ from tracker.bestbuy import (
 from tracker.store import ingest_prices, ingest_products, connect, init_db
 
 PRODUCTS_CSV = "data/structured/products.csv"
-HEADER = ("sku,captured_at_local,price,regular_price,savings,"
-          "availability,seller,stock_hint,note\n")
+PRICES_CSV = "data/structured/prices_manual.csv"
+
+#: The landing file's own header, read rather than restated. A stale copy here
+#: is how these tests passed against a file shape that no longer exists: the
+#: adapter looked complete because the header it was measured against had not
+#: gained `pickup_eta`.
+with open(PRICES_CSV, encoding="utf-8") as _handle:
+    HEADER = next(_handle)
 
 AT = datetime(2026, 9, 14, 21, 5)
 
 #: What a person still has to supply. The adapter refuses to invent either of
 #: these, so a test that exercises the schema join has to stand in for the
 #: operator rather than pretend the API settled it.
-BY_HAND = {"seller": "Best Buy"}
+BY_HAND = {"seller": "Best Buy", "pickup_eta": "today"}
 
 ON_SALE = {
     "sku": 6679150,
@@ -179,11 +185,10 @@ def test_a_column_this_adapter_cannot_fill_is_refused(tmp_path):
     SKUs would report a pickup date that moved and a stock note that vanished
     on the first automated capture, and none of it happened."""
     path = tmp_path / "prices.csv"
-    path.write_text(HEADER.replace("stock_hint,note", "stock_hint,pickup_eta,note"),
-                    encoding="utf-8")
+    path.write_text(HEADER, encoding="utf-8")
 
     with pytest.raises(IncompleteRow) as caught:
-        append_rows([{**row_from(ON_SALE, AT), **BY_HAND}], path)
+        append_rows([{**row_from(ON_SALE, AT), "seller": "Best Buy"}], path)
 
     assert "pickup_eta" in str(caught.value)
     assert path.read_text(encoding="utf-8").splitlines()[1:] == []
@@ -200,16 +205,16 @@ def test_an_unverified_seller_is_left_out_rather_than_assumed(tmp_path):
 
     assert "seller" not in row_from(ON_SALE, AT)
     with pytest.raises(IncompleteRow) as caught:
-        append_rows([row_from(ON_SALE, AT)], path)
+        append_rows([{**row_from(ON_SALE, AT), "pickup_eta": "today"}], path)
 
     assert "seller" in str(caught.value)
     assert path.read_text(encoding="utf-8").splitlines()[1:] == []
 
 
 def test_rows_follow_the_landing_files_own_header(tmp_path):
-    """The header is read, not assumed: the nine columns this adapter knows
-    written positionally into a wider file would shift every later value left
-    by one and raise nothing."""
+    """The header is read, not assumed: the columns this adapter knows written
+    positionally into a wider file would shift every later value left by one
+    and raise nothing."""
     path = tmp_path / "prices.csv"
     path.write_text(HEADER, encoding="utf-8")
     append_rows([{**row_from(ON_SALE, AT), **BY_HAND}], path)

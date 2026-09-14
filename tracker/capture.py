@@ -73,7 +73,12 @@ def prompt_for(product: Any, ask: Callable[[str], str]) -> dict[str, str] | obje
         "regular_price": ask("  comp. value / was price (blank if none): $").strip(),
         "savings": ask("  savings (blank if none): $").strip(),
         "availability": availability,
-        "seller": ask("  sold by [Best Buy]: ").strip() or "Best Buy",
+        # Blank stays blank. This defaulted to "Best Buy" on an empty
+        # answer, so an operator who never looked at the "Sold by" line
+        # still produced a row asserting a first-party listing, which is
+        # the one field the whole comparison rests on. The schema refuses
+        # a blank seller, which is the right place for that to be caught.
+        "seller": ask("  sold by (as shown, blank if not shown): ").strip(),
         "stock_hint": ask("  stock hint (blank if none): ").strip(),
         "pickup_eta": ask("  pickup (today, or a date like 2026-09-18): ").strip(),
         "note": ask("  note (blank if none): ").strip(),
