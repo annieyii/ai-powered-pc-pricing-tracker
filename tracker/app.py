@@ -108,6 +108,15 @@ def filterable_columns(products: pd.DataFrame) -> list[str]:
     return [c for c in FILTER_ORDER if c in products.columns] + rest
 
 
+#: The option standing for a product the master leaves blank in some column.
+#: Without it a blank was not an option a reader could choose, and a product
+#: carrying one vanished from the page the moment that column grew a filter,
+#: which is the silent drop this project refuses everywhere else. A real value
+#: reading exactly this would collide with it; none does, and the master is
+#: hand-verified, so this is checked rather than defended against.
+NOT_STATED = "(not stated)"
+
+
 def filter_label(column: str) -> str:
     return FILTER_LABELS.get(column, column.replace("_", " ").capitalize())
 
@@ -199,9 +208,37 @@ def option_counts(column: str, values: list[Any]) -> dict[Any, int]:
             continue
         chosen = st.session_state.get(f"filter_{other}")
         if chosen is not None:
-            others = others[others[other].isin(chosen)]
+            others = others[admits(others, other, chosen)]
     counted = others[column].value_counts()
-    return {value: int(counted.get(value, 0)) for value in values}
+    counts = {value: int(counted.get(value, 0)) for value in values}
+    counts[NOT_STATED] = int(others[column].isna().sum())
+    return counts
+
+
+def filter_options(products: pd.DataFrame, column: str) -> list[Any]:
+    """Every option one column's control offers, blank included.
+
+    One function because the control and the reset button must agree: a reset
+    that wrote a shorter list left the page looking narrowed by a choice the
+    reader could not see.
+    """
+    options = sorted(products[column].dropna().unique().tolist(), key=str)
+    if products[column].isna().any():
+        options.append(NOT_STATED)
+    return options
+
+
+def admits(frame: pd.DataFrame, column: str, kept: list[Any]) -> pd.Series:
+    """Rows this column's chosen options let through.
+
+    Blank is a choice here, not an absence of one. `isin` alone never matches
+    a null, so a product the master leaves blank would be dropped by a filter
+    the reader never touched.
+    """
+    mask = frame[column].isin([v for v in kept if v != NOT_STATED])
+    if NOT_STATED in kept:
+        mask |= frame[column].isna()
+    return mask
 
 
 def attribute_filter(column: str, label: str) -> None:
@@ -213,16 +250,16 @@ def attribute_filter(column: str, label: str) -> None:
     global eligible
     if column not in data.products.columns:
         return
-    values = sorted(data.products[column].dropna().unique().tolist())
-    if len(values) < 2:
+    options = filter_options(data.products, column)
+    if len(options) < 2:
         return
-    counts = option_counts(column, values)
+    counts = option_counts(column, options)
     kept = st.multiselect(
-        label, options=values, default=values, key=f"filter_{column}",
+        label, options=options, default=options, key=f"filter_{column}",
         format_func=lambda v: f"{v}  ({counts.get(v, 0)})")
-    if set(kept) != set(values):
+    if set(kept) != set(options):
         narrowed[label] = kept
-    eligible = eligible[eligible[column].isin(kept)]
+    eligible = eligible[admits(eligible, column, kept)]
 
 
 with st.sidebar:
@@ -247,8 +284,7 @@ with st.sidebar:
         for column in filterable_columns(data.products):
             key = f"filter_{column}"
             if key in st.session_state:
-                st.session_state[key] = sorted(
-                    data.products[column].dropna().unique().tolist())
+                st.session_state[key] = filter_options(data.products, column)
         st.session_state["products"] = list(data.products["sku"])
         # From `data`, not the `earliest`/`latest` globals: a callback runs
         # on the next script run, against what the previous one left behind.
