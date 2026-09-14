@@ -31,3 +31,6 @@ report/*.fls
 report/*.fdb_latexmk
 report/*.synctex.gz
 report/main.pdf
+
+# Supplied reference material, not mine to redistribute
+files/

@@ -171,7 +171,7 @@ def test_narrowing_the_selection_narrows_the_whole_page():
 
 
 def test_the_trend_chart_is_the_first_section(page):
-    """Deliverable B asks for a chart of price movement over time, so the
+    """A chart of price movement over time is the point of the tool, so the
     time series comes before any cross-sectional comparison."""
     assert len(page.get("plotly_chart")) == 1
 

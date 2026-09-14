@@ -1,6 +1,8 @@
 # PC Pricing Tracker (Best Buy)
 
-Built as a take-home assessment submission.
+Tracks the listed price of comparable 14-inch Windows Copilot+ PCs on Best Buy over a
+short observation window, and compares the two that match on a defined set of
+equivalence fields.
 
 ## What it does
 
@@ -45,7 +47,8 @@ looking at all the candidates can always be bent until the candidates fit.
 
 **Equivalence fields.** Two SKUs are `strict` only if all of these match exactly:
 processor model, memory, storage, screen size, operating system, device type, form
-factor. The brief names six of these. Screen size is added here, because a rule that
+factor. Six of these are the fields the comparison was specified around. Screen size
+is added here, because a rule that
 lets a 14-inch and a 16-inch machine into the same group is comparing chassis sizes
 as well as prices. The extra field only narrows the group; it never widens it.
 
@@ -146,7 +149,7 @@ data still loads.
 
 The sampling procedure, including why capture times are clustered around the Best Buy
 weekly-ad changeover rather than spaced evenly, is in
-[`docs/capture-checklist.md`](docs/capture-checklist.md).
+the capture checklist kept alongside this repository.
 
 ## What the data rules are and where they live
 
@@ -380,12 +383,11 @@ reads the page and can tell a purchase price from a financing figure.
 
 ---
 
-## Where each deliverable lives
+## Where things are
 
-| Required deliverable | Where it is in this repository |
+| What | Where |
 |---|---|
-| A. Working tracker or output file | `tracker/app.py`, over `data/structured/products.csv` and `data/structured/prices_manual.csv` |
-| B. Updateable pricing trend chart | Section 1 of the app, first on the page. Data from `tracker/metrics.py:series_for` |
-| C. Source code, formulas, or automation steps | `tracker/`, `tests/`, and the "Running it" and "Updating the data" sections above |
-| D. Brief explanation, 1 to 2 pages | `report/main.tex`, built with `cd report && latexmk -pdf main.tex`. Full specification in `docs/spec.md`; sampling procedure in `docs/capture-checklist.md` |
-| E. AI usage and human validation summary | "Where AI is used" above, `tracker/extract.py`, and `data/extraction_review.csv` alongside `data/extraction_review.qwen2.5-7b.csv`, one run per endpoint |
+| The tracker | `tracker/app.py`, over `data/structured/products.csv` and `data/structured/prices_manual.csv` |
+| The trend chart | Section 1 of the app, first on the page. Data from `tracker/metrics.py:series_for` |
+| Source and update steps | `tracker/`, `tests/`, and the "Running it" and "Updating the data" sections above |
+| Offline extraction and its score | `tracker/extract.py`, `data/extraction_review.csv` and `data/extraction_review.qwen2.5-7b.csv`, one run per endpoint |
