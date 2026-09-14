@@ -344,9 +344,9 @@ def _display(value: object) -> object:
 def review_path(model: str, directory: Path = REVIEW_DIR) -> Path:
     """Where one model's review file goes.
 
-    Both runs are the evidence for the reported score, and a fixed name let the
-    second delete the first. Unsafe characters become hyphens, so
-    ``qwen2.5:7b`` lands as ``extraction_review.qwen2.5-7b.csv``.
+    The run is the evidence for the reported score, and a fixed name let a
+    second endpoint delete the first one's. Unsafe characters become hyphens,
+    so ``qwen2.5:7b`` would land as ``extraction_review.qwen2.5-7b.csv``.
     """
     return directory / f"extraction_review.{re.sub(r'[^A-Za-z0-9._-]', '-', model)}.csv"
 

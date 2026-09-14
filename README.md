@@ -105,8 +105,9 @@ data/
     prices_manual.csv     Append-only landing file, one row per SKU per capture
   raw_specs/<sku>.txt     Verbatim page text, the input to extraction
   extraction_review.<model>.csv
-                        Extraction scored field by field against the master,
-                        one file per endpoint the run was pointed at
+                        Extraction scored field by field against the master.
+                        The model is in the name so a second run adds a file
+                        rather than overwriting the first
   summary.md              Stored dashboard summary, written only by
                         `python -m tracker.summarise`. Absent until then,
                         and the page computes its own instead
