@@ -16,8 +16,10 @@ giving a stated denominator rather than a favourable example.
 
 The model never writes to ``products.csv``. The verified master is the thing it
 is measured against, so letting extraction edit it would destroy the only
-reference the score has. Output goes to ``data/extraction_review.csv``, which
-records both values side by side and leaves the correction to a person.
+reference the score has. Output goes to ``data/extraction_review.<model>.csv``,
+which records both values side by side and leaves the correction to a person.
+The model is in the name so running a second endpoint adds a file rather than
+overwriting the first one's evidence.
 
 This module is never imported by the dashboard. It is run by hand, it is the
 only place an endpoint is configured, and the app runs with none of it set.
@@ -34,14 +36,20 @@ from pathlib import Path
 from typing import Any
 
 from openai import OpenAI
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 ROOT = Path(__file__).resolve().parents[1]
 RAW_SPECS_DIR = ROOT / "data" / "raw_specs"
 PRODUCTS_CSV = ROOT / "data" / "structured" / "products.csv"
-REVIEW_CSV = ROOT / "data" / "extraction_review.csv"
+REVIEW_DIR = ROOT / "data"
 
 REQUIRED_ENV = ("LLM_BASE_URL", "LLM_MODEL", "LLM_API_KEY")
+
+#: Seconds to wait on one completion. The SDK's own default is ten minutes,
+#: and both callers retry once, so an endpoint that accepts a connection and
+#: then goes quiet would hold a dashboard button for twenty. Nothing here is
+#: worth waiting a minute for, let alone twenty.
+REQUEST_TIMEOUT = 60.0
 
 KNOWN_STORAGE_GB = frozenset({128, 256, 512, 1024, 2048})
 SCREEN_INCH_RANGE = (10.0, 18.0)
@@ -69,7 +77,13 @@ class ExtractedSpec(BaseModel):
 
     Every field is required. An omission is a failed extraction rather than a
     null to be filled in later, and pydantic is where that is decided.
+
+    ``extra="forbid"`` is what makes the module docstring's claim true: by
+    default pydantic drops keys it was not expecting, so a reply carrying an
+    invented field parsed cleanly and the invention was never seen.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     brand: str
     model_name: str
@@ -148,7 +162,8 @@ def build_client(settings: Settings) -> OpenAI:
     reaches a remote endpoint or a local Ollama instance, and no
     backend-specific branch exists anywhere in this module.
     """
-    return OpenAI(base_url=settings.base_url, api_key=settings.api_key)
+    return OpenAI(base_url=settings.base_url, api_key=settings.api_key,
+                  timeout=REQUEST_TIMEOUT)
 
 
 def extract(raw_text: str, client: Any, model: str) -> ExtractedSpec:
@@ -326,6 +341,17 @@ def _display(value: object) -> object:
     return value
 
 
+def review_path(model: str, directory: Path = REVIEW_DIR) -> Path:
+    """Where one model's review file goes.
+
+    The model name travels in the filename because the two endpoint runs are the
+    evidence for the score, and a fixed name would let the second run delete
+    the first. Anything not safe in a filename becomes a hyphen, so
+    ``qwen2.5:7b`` lands as ``extraction_review.qwen2.5-7b.csv``.
+    """
+    return directory / f"extraction_review.{re.sub(r'[^A-Za-z0-9._-]', '-', model)}.csv"
+
+
 def read_truth(csv_path: Path | str = PRODUCTS_CSV) -> dict[str, dict[str, str]]:
     """The human-verified master, keyed by SKU. Read only, never written."""
     with open(csv_path, newline="", encoding="utf-8") as handle:
@@ -391,8 +417,9 @@ def main() -> int:
               file=sys.stderr)
         return 1
 
-    REVIEW_CSV.parent.mkdir(parents=True, exist_ok=True)
-    with open(REVIEW_CSV, "w", newline="", encoding="utf-8") as handle:
+    review_csv = review_path(settings.model)
+    review_csv.parent.mkdir(parents=True, exist_ok=True)
+    with open(review_csv, "w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=REVIEW_COLUMNS)
         writer.writeheader()
         writer.writerows(rows)
@@ -402,7 +429,7 @@ def main() -> int:
           f"product{'' if products == 1 else 's'}; "
           f"{matched} of {compared} matched the verified value; "
           f"{fired} validator findings. "
-          f"Written to {REVIEW_CSV.relative_to(ROOT)}.")
+          f"Written to {review_csv.relative_to(ROOT)}.")
     if skipped:
         print(f"no raw text for {', '.join(sorted(skipped))}", file=sys.stderr)
     return 0

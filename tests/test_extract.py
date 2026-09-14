@@ -19,6 +19,7 @@ from tracker.extract import (
     form_factor_in_enum,
     ram_is_power_of_two,
     read_settings,
+    review_path,
     score,
     screen_inch_in_range,
     storage_in_known_set,
@@ -301,3 +302,16 @@ def test_a_complete_environment_is_read_without_defaults():
     settings = read_settings(ENV)
     assert settings.base_url == ENV["LLM_BASE_URL"]
     assert settings.model == ENV["LLM_MODEL"]
+
+
+# --- the review file names the model it scored --------------------------
+
+def test_two_endpoints_write_two_review_files(tmp_path):
+    """A fixed name would let the second run delete the first run's evidence,
+    and both runs are what the reported score rests on."""
+    first = review_path("gpt-4o-mini", tmp_path)
+    second = review_path("qwen2.5:7b", tmp_path)
+    assert first != second
+    assert first.name == "extraction_review.gpt-4o-mini.csv"
+    # A colon is legal in a model name and unwelcome in a filename.
+    assert second.name == "extraction_review.qwen2.5-7b.csv"
