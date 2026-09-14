@@ -13,7 +13,7 @@ Requires [uv](https://docs.astral.sh/uv/) and Python 3.10 or newer.
 ```bash
 uv sync
 uv run streamlit run tracker/app.py     # the dashboard
-uv run pytest                           # 278 tests, none reaching the network
+uv run pytest                           # 281 tests, none reaching the network
 ```
 
 That is the whole setup: no database to create, no environment variable, no API key. Every section renders deterministically without one.
@@ -71,8 +71,12 @@ data/
     products.csv          Product master, verified by hand
     prices_manual.csv     Append-only landing file, one row per SKU per capture
   raw_specs/<sku>.txt     Verbatim page text, the input to extraction
-  extraction_review.csv   Extraction scored field by field against the master
-  summary.md              Stored dashboard summary
+  extraction_review.<model>.csv
+                        Extraction scored field by field against the master,
+                        one file per endpoint the run was pointed at
+  summary.md              Stored dashboard summary, written only by
+                        `python -m tracker.summarise`. Absent until then,
+                        and the page computes its own instead
 tests/                    One file per module
 ```
 

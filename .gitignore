@@ -24,13 +24,7 @@ docs/diagrams/*.visual-check.*
 .env
 
 # LaTeX build output
-report/*.aux
-report/*.log
-report/*.out
-report/*.fls
-report/*.fdb_latexmk
-report/*.synctex.gz
-report/main.pdf
+report/
 
 # Supplied reference material, not mine to redistribute
 files/
