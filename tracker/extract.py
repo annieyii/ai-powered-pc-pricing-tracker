@@ -48,10 +48,8 @@ REVIEW_DIR = ROOT / "data"
 
 REQUIRED_ENV = ("LLM_BASE_URL", "LLM_MODEL", "LLM_API_KEY")
 
-#: Seconds to wait on one completion. The SDK's own default is ten minutes,
-#: and both callers retry once, so an endpoint that accepts a connection and
-#: then goes quiet would hold a dashboard button for twenty. Nothing here is
-#: worth waiting a minute for, let alone twenty.
+#: Seconds to wait on one completion. The SDK defaults to ten minutes and both
+#: callers retry once, so a quiet endpoint held a dashboard button for twenty.
 REQUEST_TIMEOUT = 60.0
 
 KNOWN_STORAGE_GB = frozenset({128, 256, 512, 1024, 2048})
@@ -81,9 +79,8 @@ class ExtractedSpec(BaseModel):
     Every field is required. An omission is a failed extraction rather than a
     null to be filled in later, and pydantic is where that is decided.
 
-    ``extra="forbid"`` is what makes the module docstring's claim true: by
-    default pydantic drops keys it was not expecting, so a reply carrying an
-    invented field parsed cleanly and the invention was never seen.
+    ``extra="forbid"`` makes the module docstring true: by default pydantic
+    drops unexpected keys, so an invented field parsed cleanly and unseen.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -347,9 +344,8 @@ def _display(value: object) -> object:
 def review_path(model: str, directory: Path = REVIEW_DIR) -> Path:
     """Where one model's review file goes.
 
-    The model name travels in the filename because the two endpoint runs are the
-    evidence for the score, and a fixed name would let the second run delete
-    the first. Anything not safe in a filename becomes a hyphen, so
+    Both runs are the evidence for the reported score, and a fixed name let the
+    second delete the first. Unsafe characters become hyphens, so
     ``qwen2.5:7b`` lands as ``extraction_review.qwen2.5-7b.csv``.
     """
     return directory / f"extraction_review.{re.sub(r'[^A-Za-z0-9._-]', '-', model)}.csv"

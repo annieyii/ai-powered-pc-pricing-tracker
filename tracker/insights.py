@@ -165,15 +165,12 @@ def magnitude(change: float | None, reference_price: float | None) -> float:
     clipped there, because the difference between a 30 percent cut and a 40
     percent cut does not change what a reader does about it.
 
-    A kind that carries no figure gets ``BASE_MAGNITUDE``. It is deliberately
-    non-zero, so a state cannot be ranked out of existence, and deliberately
-    low. Low is not the same as always losing, and the earlier wording here
-    claimed it was: a strict stock note scores 0.07, so a strict price move
-    ranks below it until the move is worth about 0.7 percent of list, which on
-    a $1,299.99 machine is $9.10. Whether a $5 move should lead the page is
-    a judgement, and this is where it is made rather than hidden. The four
-    constants are policy, not measurement; nothing here was calibrated against
-    outcomes because there are none to calibrate against.
+    A kind with no figure gets ``BASE_MAGNITUDE``: non-zero so a state cannot
+    be ranked out of existence, low so it rarely leads. Low is not always
+    losing. A strict stock note scores 0.07, which a strict price move only
+    passes at about 0.7 percent of list, or $9.10 on a $1,299.99 machine.
+    Whether a $5 move should lead is a judgement, made here rather than hidden.
+    All four constants are policy, not measurement.
     """
     if change is None or not reference_price:
         return BASE_MAGNITUDE
@@ -528,12 +525,10 @@ def detect(prices: pd.DataFrame, products: pd.DataFrame,
                                {"sku": sku, "name": name_of(sku),
                                 "ends": ends, "at": _stamp(at)}))
 
-        # Every value this column has held is a Best Buy scarcity badge ("Act
-        # fast - Only 1 left"), which is why the kind is named for scarcity.
-        # The test is only that the field is non-empty, so a seller who wrote
-        # "plenty available" there would be reported under a name that
-        # contradicts the sentence. The sentence itself quotes the note and
-        # claims nothing, which bounds the damage but does not remove it.
+        # Named for scarcity because every value this column has held is a
+        # "Act fast - Only 1 left" badge. The test is only non-empty, so
+        # "plenty available" would fire too. The sentence quotes, never
+        # characterises, which bounds that but does not remove it.
         hint = _value(last, "stock_hint")
         if hint:
             found.append(build("stock_scarcity", (sku,), at,
@@ -659,10 +654,8 @@ class Selection:
     insights: tuple[Insight, ...]
     framing: str | None
     #: "score" when no model was asked, "model" when one chose, "fallback"
-    #: when one was asked and did not answer usefully. The last two are the
-    #: distinction the docstring above exists for, and collapsing them into
-    #: "score" told a reader the model was never involved when it had just
-    #: failed.
+    #: when one was asked and did not answer usefully. Collapsing the last into
+    #: the first told the reader no model was involved when one had failed.
     source: str
 
 

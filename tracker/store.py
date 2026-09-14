@@ -73,17 +73,9 @@ CREATE TABLE price_snapshots (
            OR abs(savings - (regular_price - price)) < 0.02)
 );
 
--- `strict` is the claim the whole comparison rests on, and until these two
--- triggers existed it was only a label: a master naming two machines with
--- different processors, or naming three of them, was accepted and the page
--- went on describing the result as a matched pair. A CHECK cannot see other
--- rows, so the rule lives in triggers rather than in a column constraint, but
--- it is still the database refusing the row rather than a chain of Python.
---
--- The seven fields are the equivalence rule: processor model, memory,
--- storage, screen size, operating system, device type and form factor. `IS
--- NOT` rather than `<>` so a null on one side is a disagreement instead of
--- an unknown that passes.
+-- `strict` is the claim the comparison rests on, so the database checks it.
+-- A CHECK cannot see other rows; hence triggers. The seven columns are the
+-- equivalence rule. `IS NOT`, so a null is a disagreement and not a pass.
 CREATE TRIGGER strict_products_must_satisfy_the_equivalence_rule
 AFTER INSERT ON products
 WHEN NEW.role = 'strict'
@@ -100,10 +92,8 @@ BEGIN
                       OR form_factor      IS NOT NEW.form_factor));
 END;
 
--- A third strict product does not make a larger pair. The comparison takes
--- the cheapest and the dearest, so a third one silently turns a matched-pair
--- delta into a range across a group that was never claimed to be equivalent
--- as a group.
+-- A third member turns the pair's delta into a min-max range across products
+-- never claimed equivalent to each other.
 CREATE TRIGGER the_strict_group_is_a_pair
 AFTER INSERT ON products
 WHEN NEW.role = 'strict'
@@ -222,10 +212,9 @@ def ingest_products(conn: sqlite3.Connection, csv_path: Path | str) -> int:
         try:
             conn.execute(statement, [_cell(record[f]) for f in fields])
         except sqlite3.IntegrityError as exc:
-            # The master is not a landing file. One bad price row is reported
-            # and the rest of the page still loads; one bad product row means
-            # every comparison below it is describing something else, so this
-            # stops rather than continues.
+            # The master is not a landing file. A bad price row is reported and
+            # the page loads; a bad product row makes every comparison below it
+            # describe something else, so this stops.
             raise ValueError(
                 f"products file line {line} (sku {record['sku']}) was refused: "
                 f"{exc}") from exc
@@ -280,10 +269,8 @@ def ingest_prices(conn: sqlite3.Connection, csv_path: Path | str) -> IngestResul
             continue
 
         values = [sku, stamp.strftime(TIMESTAMP_FORMAT)]
-        # A blank money cell is a fact: the page showed no such figure. Text
-        # that is not a number is not, and coercing it to NULL would turn
-        # corrupt input into a plausible absence, which is repair by another
-        # name. Blank is kept, unreadable is refused.
+        # Blank is a fact: the page showed no such figure. Text that is not a
+        # number is not, and coercing it to NULL fakes that fact.
         unreadable = None
         for column in MONEY_COLUMNS:
             cell = _cell(record[column])

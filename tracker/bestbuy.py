@@ -78,9 +78,8 @@ ORDERABLE = {
 
 REQUIRED_ENV = ("BESTBUY_API_KEY",)
 
-#: Seconds to wait on one request. urlopen without one waits on the operating
-#: system's default, which on a hung connection is minutes; a capture session
-#: that stalls is worse than a SKU that is refused and reported.
+#: Seconds to wait on one request. Without it, urlopen waits on the operating
+#: system's default, which on a hung connection is minutes.
 REQUEST_TIMEOUT = 30.0
 
 
@@ -218,12 +217,10 @@ def main(argv: list[str] | None = None) -> int:
             rows.append(row_from(fetch(sku, api_key), captured_at))
         # A refusal is reported and the remaining SKUs still run. Nothing is
         # repaired: the missing row simply stays missing, as in the manual path.
-        # Deliberately broad on the network side. A DNS failure, a timeout, a
-        # truncated body and a payload that is not JSON are all one SKU that
-        # could not be read, and letting any of them out of this loop would
-        # abandon the SKUs after it for a reason that has nothing to do with
-        # them. UnmappedValue is kept separate because it is this adapter
-        # refusing to guess, not the network failing.
+        # Broad on purpose: a DNS failure, a timeout, a truncated body and a
+        # payload that is not JSON are all one SKU that could not be read, and
+        # letting one out abandons every SKU after it. UnmappedValue is this
+        # adapter refusing to guess, which is a different thing.
         except (UnmappedValue, urllib.error.URLError, OSError, ValueError,
                 KeyError) as exc:
             print(f"{sku}: refused, {exc}", file=sys.stderr)

@@ -27,11 +27,9 @@ ROOT = Path(__file__).resolve().parents[1]
 PRODUCTS_CSV = ROOT / "data" / "structured" / "products.csv"
 PRICES_CSV = ROOT / "data" / "structured" / "prices_manual.csv"
 
-#: Every timestamp in the landing file is Asia/Taipei, and the session banner
-#: says so. `datetime.now()` is whatever the operator's machine is set to, so a
-#: capture taken from another timezone was labelled Taipei and filed eight
-#: hours out. The strict comparison pairs snapshots by exact timestamp, so that
-#: is not a cosmetic error: it decides what compares with what.
+#: The landing file is Asia/Taipei throughout. `datetime.now()` is whatever
+#: the operator's machine is set to, and the comparison pairs snapshots by
+#: exact timestamp, so the zone decides what compares with what.
 CAPTURE_ZONE = ZoneInfo("Asia/Taipei")
 
 AVAILABILITY_CHOICES = {"1": "Add to cart", "2": "Unavailable", "3": "Sold Out"}

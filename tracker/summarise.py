@@ -283,22 +283,16 @@ def verify_grounded(prose: str, context: Mapping[str, Any]) -> list[str]:
     price is a perfectly plausible price. Reported as written, so the page can
     name the value it refused.
 
-    **What it does not check.** Membership of numeric tokens, and nothing else.
-    Everything below passes:
+    **What it does not check.** Numeric token membership, and nothing else.
+    These all pass:
 
-    * a figure attached to the wrong subject, because the figure is present:
-      `Dell 14S was listed at $1,299.99` is wrong and grounded, as is a count
-      borrowed from an unrelated field;
-    * a number carrying the wrong unit, since only the digits are compared;
-    * any sentence with no figure in it at all, including a causal claim, a
-      forecast or a recommendation. The system prompt forbids all three and
-      nothing here enforces that.
+    * a figure attached to the wrong subject, because the figure is present;
+    * a number in the wrong unit, since only digits are compared;
+    * any sentence with no figure at all, causal claims, forecasts and
+      recommendations included. The prompt forbids those; nothing enforces it.
 
-    Catching any of these needs the claim parsed and matched to its subject,
-    which this does not attempt. The check bounds invention, not
-    interpretation, and the summary is worth exactly that much. A reviewer
-    weighing how far to trust the prose should read this paragraph as the
-    limit, not the docstring above it.
+    The check bounds invention, not interpretation. This paragraph is the
+    limit on trusting the prose, not the description above it.
     """
     grounded = _context_numbers(context)
     seen: set[str] = set()
@@ -406,13 +400,10 @@ def write_stored_summary(prose: str, model: str, context: Mapping[str, Any],
 def stored_is_stale(stored: StoredSummary, context: Mapping[str, Any]) -> bool:
     """True when snapshots have been recorded since the summary was written.
 
-    **Newer only.** The header records the latest capture the summary saw, so
-    a correction to an existing row or a deleted row leaves that timestamp
-    where it was and this returns False: the stored prose can outlive the
-    figures it describes. Catching that needs the summary to carry a digest of
-    what it was generated from rather than one timestamp, which this does not
-    do. The page's other guard covers the common case, since any active filter
-    replaces the stored summary outright.
+    **Newer only.** A corrected or deleted row leaves the latest capture time
+    where it was, so this returns False and the stored prose outlives the
+    figures it describes. Catching that needs a digest of what was summarised,
+    not one timestamp. An active filter replaces the stored summary anyway.
     """
     latest = context.get("last_capture")
     if not latest or not stored.last_capture:
