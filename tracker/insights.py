@@ -640,7 +640,7 @@ class Selection:
 
     ``source`` is on the record because the two paths are not equally
     defensible. A reader who is looking at a model's choice is entitled to know
-    that, and a reviewer who is looking at a fallback is entitled to know the
+    that, and a reader who is looking at a fallback is entitled to know the
     model was asked and did not answer usefully.
     """
 

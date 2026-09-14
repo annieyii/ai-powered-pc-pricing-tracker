@@ -20,7 +20,7 @@ It needs no endpoint, no key and no network, and it is what the dashboard
 renders when nothing else is present.
 
 Run as a script, this module writes a verified summary to ``data/summary.md``
-so a reviewer with no endpoint of their own still sees real model-written
+so a reader with no endpoint of their own still sees real model-written
 prose. The dashboard reads that file; it never writes it without an explicit
 action, and it never calls an endpoint on page load.
 """

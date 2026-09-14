@@ -23,7 +23,7 @@ docs/diagrams/*.visual-check.*
 # Local secrets
 .env
 
-# LaTeX build output (the final PDF is added deliberately at submission)
+# LaTeX build output
 report/*.aux
 report/*.log
 report/*.out
