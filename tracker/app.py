@@ -679,7 +679,10 @@ for product in reference.itertuples():
                  f"[listing]({product.source_url})"))
 
 st.divider()
-st.caption(usd(
-    "Every product here is listed at $1,299.99 except the Intel variant at "
-    "$1,349.99. Where a current price sits below list, that is promotional "
-    "state."))
+# "Every product here is $1,299.99 except one" was true of the master and
+# false of any selection that removed a product, and the two figures are in
+# the table above anyway. What the reader cannot read off that table is what
+# the comparison means, so that is what is left.
+st.caption("Where a current price sits below the list price recorded in "
+           "`products.csv`, that is promotional state rather than a change "
+           "of list.")

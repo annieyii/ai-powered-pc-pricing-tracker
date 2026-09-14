@@ -21,8 +21,11 @@ which records both values side by side and leaves the correction to a person.
 The model is in the name so running a second endpoint adds a file rather than
 overwriting the first one's evidence.
 
-This module is never imported by the dashboard. It is run by hand, it is the
-only place an endpoint is configured, and the app runs with none of it set.
+Nothing here runs on page load. The dashboard reaches this module only
+transitively, through ``summarise``, and only for the endpoint settings and
+the grounding rule it reuses rather than restates; no extraction is performed
+and no endpoint is called unless a person runs this file. The app runs with
+none of it set.
 """
 from __future__ import annotations
 

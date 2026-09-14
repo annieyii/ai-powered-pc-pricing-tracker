@@ -404,7 +404,16 @@ def write_stored_summary(prose: str, model: str, context: Mapping[str, Any],
 
 
 def stored_is_stale(stored: StoredSummary, context: Mapping[str, Any]) -> bool:
-    """True when snapshots have been recorded since the summary was written."""
+    """True when snapshots have been recorded since the summary was written.
+
+    **Newer only.** The header records the latest capture the summary saw, so
+    a correction to an existing row or a deleted row leaves that timestamp
+    where it was and this returns False: the stored prose can outlive the
+    figures it describes. Catching that needs the summary to carry a digest of
+    what it was generated from rather than one timestamp, which this does not
+    do. The page's other guard covers the common case, since any active filter
+    replaces the stored summary outright.
+    """
     latest = context.get("last_capture")
     if not latest or not stored.last_capture:
         return False
